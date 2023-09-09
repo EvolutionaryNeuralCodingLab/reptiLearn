@@ -115,7 +115,7 @@ class DiscriminationExperiment(exp.Experiment):
         self.actions["Find aruco markers"] = {"run": self.find_aruco}
         self.actions["Log next detection"] = {"run": self.log_next_detection}
         self.find_aruco()
-        self.bbox_collector = BBoxDataCollector(self.log)
+        self.bbox_collector = BBoxDataCollector("head_bbox")
         self.print_next_detection = False
 
     def run(self):

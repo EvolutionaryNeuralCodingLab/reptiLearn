@@ -178,8 +178,7 @@ class LocationExperiment(exp.Experiment):
             self.on_day_end, [19, 0], repeats=True
         )
 
-        self.find_aruco()
-        self.bbox_collector = BBoxDataCollector()
+        self.bbox_collector = BBoxDataCollector("head_bbox")
         self.print_next_detection = False
 
         session_state["is_in_area"] = False
@@ -241,13 +240,10 @@ class LocationExperiment(exp.Experiment):
                 "Expecting either 'aruco_id' or 'location' params in 'reinforced_location'"
             )
 
-        if self.aruco_img is not None:
-            img = np.copy(self.aruco_img)
-        else:
-            img, _ = image_sources[params["image_source_id"]].get_image(
-                scale_to_8bit=True
-            )
-            img = np.stack((img,) * 3, axis=-1)
+        img, _ = image_sources[params["image_source_id"]].get_image(
+            scale_to_8bit=True
+        )
+        img = np.stack((img,) * 3, axis=-1)
 
         loc = tuple(session_state["reinforced_location"])
         r1 = params["reinforced_area"]["radius"]

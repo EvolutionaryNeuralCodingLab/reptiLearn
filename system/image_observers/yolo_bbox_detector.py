@@ -47,24 +47,22 @@ class YOLOv4ImageObserver(ImageObserver):
         det = self.detector.detect_image(img)
         self._update_output(det if det is not None else self.nan_det)
 
-    def _release(self):
-        pass
-
     def _get_buffer_opts(self):
         return "d", 5, 5, np.double
 
 
 class BBoxDataCollector:
-    def __init__(self):
+    def __init__(self, obs_id):
         self.obs = None
         self.bbox_log = None
         self.remove_listener = None
+        self.obs_id = obs_id
 
-    def start(self, listener=None, obs_id="head_bbox"):
-        if obs_id not in video_system.image_observers:
-            raise ValueError(f"Unknown image observer '{obs_id}'")
+    def start(self, listener=None):
+        if self.obs_id not in video_system.image_observers:
+            raise ValueError(f"Unknown image observer '{self.obs_id}'")
 
-        self.obs: ImageObserver = video_system.image_observers[obs_id]
+        self.obs: ImageObserver = video_system.image_observers[self.obs_id]
 
         if listener is not None:
             # NOTE: assuming this runs on the main process
@@ -80,7 +78,7 @@ class BBoxDataCollector:
                 ("y2", "double precision"),
                 ("confidence", "double precision"),
             ],
-            csv_path=exp.session_state["data_dir"] / "head_bbox.csv",
+            csv_path=exp.session_state["data_dir"] / (self.obs_id + ".csv"),
             db_table_name="bbox_position",
             split_csv=True,
         )

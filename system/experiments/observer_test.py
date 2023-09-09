@@ -41,6 +41,7 @@ class ObserverTest(exp.Experiment):
         obs_ids = exp.get_params().get("obs_ids", None)
         if obs_ids is not None:
             for obs_id in obs_ids:
+                self.log.info(f"Adding listener for {obs_id}")
                 self.remove_listeners.append(vid.image_observers[obs_id].add_listener(
                     self.on_obs_update(obs_id), exp.state
                 ))
@@ -53,7 +54,7 @@ class ObserverTest(exp.Experiment):
     def on_obs_update(self, obs_id):
         self.update_count[obs_id] = 0
         self.last_ts[obs_id] = None
-    
+
         def on_update(data, timestamp):
             self.update_count[obs_id] += 1
             if self.last_ts[obs_id] is None:

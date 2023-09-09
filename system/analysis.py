@@ -91,8 +91,8 @@ def idx_for_time(df: pd.DataFrame, timestamp: pd.Timestamp, time_col=None) -> in
     time_col: The name of the time column. When equals None the dataframe index
               will be used.
     """
-    if time_col is None:
-        return df.index.get_loc(timestamp, method="nearest")
+    if time_col is None:     
+        return df.index.get_indexer([timestamp], method='nearest')[0]
     else:
         return (df[time_col] - timestamp).abs().argmin()
 
@@ -462,7 +462,7 @@ class SessionInfo:
         return list(videos)
 
     def video_position_at_time(
-        self, timestamp: pd.Timestamp, videos=None
+        self, timestamp: pd.Timestamp, videos=None, verbose=True,
     ) -> List[VideoPosition]:
         """
         Find all video files and frame numbers matching the supplied timestamp.
@@ -478,8 +478,9 @@ class SessionInfo:
 
         for vid in videos:
             if vid.timestamps is None:
-                print(f"WARNING: Video {vid.name}, {vid.time} has no timestamps")
-                return
+                if verbose:
+                    print(f"WARNING: Video {vid.name}, {vid.time} has no timestamps")
+                continue
 
             if is_timestamp_contained(vid.timestamps, timestamp):
                 res.append(VideoPosition(vid, timestamp))
