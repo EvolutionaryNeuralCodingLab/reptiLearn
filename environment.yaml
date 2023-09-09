@@ -1,4 +1,4 @@
-name: reptilearn
+name: reptilearn2
 channels:
   - conda-forge
   - defaults
@@ -7,6 +7,7 @@ dependencies:
   - python=3.10
   - pip:
     - flask
+    - flask[async]
     - flask-cors
     - flask-socketio
     - imageio

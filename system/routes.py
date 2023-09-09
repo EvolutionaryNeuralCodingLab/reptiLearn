@@ -302,10 +302,10 @@ def add_routes(app, restart_hook):
             flask.abort(500, e)
 
     @app.route("/sessions/delete", methods=["POST"])
-    def sessions_delete():
+    async def sessions_delete():
         try:
             sessions = flask.request.json
-            experiment.delete_sessions(sessions)
+            await experiment._async_delete_sessions(sessions)
             return flask.Response("ok")
         except Exception as e:
             log.exception("Exception while deleting sessions:")

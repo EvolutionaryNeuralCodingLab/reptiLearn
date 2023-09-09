@@ -44,7 +44,7 @@ args = arg_parser.parse_args()
 
 try:
     print("🦎 Loading ReptiLearn")
-except:
+except Exception:
     print("Loading ReptiLearn")
 
 # Check for updates
@@ -106,6 +106,9 @@ def restart_system():
     experiment.shutdown()
 
 
+shutdown_main_event = threading.Event()
+
+
 def shutdown():
     log.info("Shutting down...")
 
@@ -117,6 +120,7 @@ def shutdown():
     rl_logging.shutdown()
     stop_state_emitter()
     dispatcher.stop()
+    shutdown_main_event.set()
 
     if restart:
         try:
@@ -164,3 +168,6 @@ log.info(f"Running web server on {host}:{port}")
 
 flask_thread = threading.Thread(target=socketio.run, args=(app,), kwargs={"host": host, "port": port}, daemon=True)
 flask_thread.start()
+
+# Necessary to maintain the main thread, otherwise async flask doesn't work.
+shutdown_main_event.wait()
