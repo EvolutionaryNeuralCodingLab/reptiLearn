@@ -3,7 +3,6 @@ Flask REST API routes that can be used for controlling the system. These routes 
 
 Author: Tal Eisenberg, 2021, 2022
 """
-import os
 import flask
 import json
 from configure import get_config
@@ -20,34 +19,32 @@ import rl_logging
 import version
 
 
-def add_routes(app, restart_hook):
+def add_routes(app):
     log = rl_logging.get_main_logger()
 
     # Flask REST API
     @app.route("/system/version")
     def route_system_version():
         return flask.Response(
-            json.dumps({
-                "installed": {
-                    "commit": version.installed_commit_hash,
-                    "timestamp": version.installed_commit_ts,
+            json.dumps(
+                {
+                    "installed": {
+                        "commit": version.installed_commit_hash,
+                        "timestamp": version.installed_commit_ts,
+                    },
+                    "latest": {
+                        "commit": version.latest_commit_hash,
+                        "timestamp": version.latest_commit_ts,
+                    },
                 },
-                "latest": {
-                    "commit": version.latest_commit_hash,
-                    "timestamp": version.latest_commit_ts,
-                }
-            }, default=json_convert),
+                default=json_convert,
+            ),
             mimetype="application/json",
         )
 
     @app.route("/system/shutdown")
     def route_system_shutdown():
         experiment.shutdown()
-        return flask.Response("ok")
-
-    @app.route("/system/restart")
-    def route_system_restart():
-        restart_hook()
         return flask.Response("ok")
 
     @app.route("/config/<attribute>")

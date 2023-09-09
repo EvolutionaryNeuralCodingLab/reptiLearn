@@ -67,9 +67,6 @@ export const api = {
         shutdown() {
             return request('/system/shutdown');
         },
-        restart() {
-            return request('/system/restart');
-        },
         version() {
             return requestJSON('/system/version');
         }
