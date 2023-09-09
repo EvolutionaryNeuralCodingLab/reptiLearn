@@ -1,4 +1,4 @@
-name: reptilearn2
+name: reptilearn
 channels:
   - conda-forge
   - defaults
