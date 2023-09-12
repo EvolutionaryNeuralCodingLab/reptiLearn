@@ -95,16 +95,8 @@ log = rl_logging.init(
     default_level=logging.getLevelName(config.log_level),
 )
 
-# Setup restart command
-restart = False
 
-
-def restart_system():
-    global restart
-    log.info("Restarting system...")
-    restart = True
-    experiment.shutdown()
-
+# System shutdown handler
 
 shutdown_main_event = threading.Event()
 
@@ -122,15 +114,6 @@ def shutdown():
     dispatcher.stop()
     shutdown_main_event.set()
 
-    if restart:
-        try:
-            p = psutil.Process(os.getpid())
-            for handler in p.open_files() + p.connections():
-                os.close(handler.fd)
-        except Exception as e:
-            print("ERROR: While cleaning up before restart:", e)
-        os.execl(sys.executable, sys.executable, *sys.argv)
-
 
 # Initialize all other modules
 mqtt.init()
@@ -140,7 +123,7 @@ video_system.init(state)
 experiment.init(state, on_loop_shutdown=shutdown)
 
 # Setup flask http routes
-routes.add_routes(app, restart_system)
+routes.add_routes(app)
 
 # Start the video system
 video_system.start_processes()
@@ -166,7 +149,9 @@ threading.Thread(target=state_listen).start()
 host, port = config.web_ui["host"], config.web_ui["port"]
 log.info(f"Running web server on {host}:{port}")
 
-flask_thread = threading.Thread(target=socketio.run, args=(app,), kwargs={"host": host, "port": port}, daemon=True)
+flask_thread = threading.Thread(
+    target=socketio.run, args=(app,), kwargs={"host": host, "port": port}, daemon=True
+)
 flask_thread.start()
 
 # Necessary to maintain the main thread, otherwise async flask doesn't work.
