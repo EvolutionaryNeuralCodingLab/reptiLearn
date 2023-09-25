@@ -29,8 +29,8 @@ export const MainMenu = () => {
             <div className="h-full overflow-visible">
                 <div className="text-6xl z-10 font-[Helvetica] absolute top-5 left-[176px]">
                     <a href="https://github.com/neural-electrophysiology-tool-team/reptilearn" target="_blank" rel="noreferrer">
-                        <span className="font-bold">REPTILE</span>
-                        <span className="font-extralight">ARN</span></a>
+                        <span className="font-bold">REPTI</span>
+                        <span className="font-light">LEARN</span></a>
                     <div className="font-[helvetica] font-extralight text-sm text-right">{timestamp} <span className="font-bold">{commit}</span></div>
                     {not_latest_version && <div className="font-[helvetica] font-bold text-sm text-right">A new version is available!</div>}
                 </div>
