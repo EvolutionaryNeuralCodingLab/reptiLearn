@@ -10,6 +10,8 @@ export const MQTT = (canvas_id, mqtt_address, on_connect, on_disconnect, on_fail
     const outgoing_topic = `canvas/${canvas_id}/out`;
     const client = new Paho.Client(mqtt_address.host, mqtt_address.port, canvas_id);
 
+    let connected = false;
+
     const make_message = (topic, payload, retained = false) => {
         const msg = new Paho.Message(JSON.stringify(payload))
         msg.destinationName = outgoing_topic + "/" + topic;
@@ -18,6 +20,10 @@ export const MQTT = (canvas_id, mqtt_address, on_connect, on_disconnect, on_fail
     };
 
     const publish = (topic, payload, retained = false) => {
+        if (!connected) {
+            return;
+        }
+
         payload.response_timestamp = Date.now() / 1000;
         // console.log("publishing payload", payload, "topic", topic)
         client.publish(make_message(topic, payload, retained));
@@ -30,6 +36,10 @@ export const MQTT = (canvas_id, mqtt_address, on_connect, on_disconnect, on_fail
         }
 
         console.error(payload);
+
+        if (!connected) {
+            return;
+        }
         publish("error", payload)
     }
 
@@ -42,11 +52,13 @@ export const MQTT = (canvas_id, mqtt_address, on_connect, on_disconnect, on_fail
         onSuccess() {
             console.log(`MQTT connected successfully to ${mqtt_address.host}:${mqtt_address.port}. Subscribing to incoming_topic '${incoming_topic}'`);
             client.subscribe(incoming_topic + '/#');
+            connected = true;            
             publish("connected", { value: true }, true);
             on_connect?.();
         },
         onFailure() {
             console.error(`MQTT connection to ${mqtt_address.host}:${mqtt_address.port} failed.`)
+            connected = false
             on_failure?.();
         },
         willMessage: make_message("connected", { value: false }, true),
@@ -65,12 +77,15 @@ export const MQTT = (canvas_id, mqtt_address, on_connect, on_disconnect, on_fail
         };
     };
 
+    const is_connected = () => connected;
+
     return {
-        mqtt: client,
+        client,
         incoming_topic,
         outgoing_topic,
         publish,
         publish_error,
         set_on_message,
+        is_connected,
     }
 };
