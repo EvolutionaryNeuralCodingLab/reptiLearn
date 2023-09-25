@@ -1,4 +1,5 @@
 import experiment as exp
+from data_log import QueuedDataLogger
 from canvas import Canvas
 
 
@@ -10,7 +11,9 @@ class CanvasVideoExperiment(exp.Experiment):
     }
 
     def on_video_update(self, payload):
-        self.log.info(f"video update {payload}")
+        self.frame_logger.log(
+            [payload["response_timestamp"], payload["video_timestamp"]]
+        )
 
     def on_video_ended(self, payload):
         self.log.info(f"video ended {payload}")
@@ -29,7 +32,9 @@ class CanvasVideoExperiment(exp.Experiment):
             # y=(self.height - h) // 2,
             id="vid_node",
         )
-        self.canvas.video_set_props("vid", playbackRate=exp.get_params()["playback_rate"])
+        self.canvas.video_set_props(
+            "vid", playbackRate=exp.get_params()["playback_rate"]
+        )
         self.canvas.make_tween(
             "vid_pos",
             node_id="vid_node",
@@ -43,7 +48,7 @@ class CanvasVideoExperiment(exp.Experiment):
             width=w,
             height=h,
             duration=5,
-            easing="BounceEaseIn"
+            easing="BounceEaseIn",
         )
 
         self.canvas.play_tween("vid_pos")
@@ -54,7 +59,19 @@ class CanvasVideoExperiment(exp.Experiment):
         self.log.info(f"Received video error: {payload}")
 
     async def run(self):
-        self.canvas = Canvas(exp.get_params()["canvas_id"], on_disconnect=exp.stop_experiment)
+        # create and start data logger for video timing data
+        self.frame_logger = QueuedDataLogger(
+            ["time", "video_timestamp"],
+            exp.session_state["data_dir"] / "video_timing.csv",
+            split_csv=True,
+        )
+        self.frame_logger.start()
+
+        self.canvas = Canvas(
+            exp.get_params()["canvas_id"],
+            on_disconnect=exp.stop_experiment,
+            logger=self.log,
+        )
         await self.canvas.aio.connected()
         stage = await self.canvas.aio.get_node("stage")
         self.width = stage["attrs"]["width"]
@@ -66,7 +83,7 @@ class CanvasVideoExperiment(exp.Experiment):
             exp.get_params()["video_url"],
             muted=True,
             video_loadedmetadata=self.video_loadedmetadata,
-            # on_update=self.on_video_update,
+            on_update=self.on_video_update,
             on_ended=self.on_video_ended,
             video_error=self.video_error,
         )
@@ -84,5 +101,6 @@ class CanvasVideoExperiment(exp.Experiment):
         await self.canvas.aio.video_set_props("vid", currentTime=0)
 
     def end(self):
+        self.frame_logger.stop()
         self.canvas.remove_video("vid")
         self.canvas.node("vid_node", "destroy")
