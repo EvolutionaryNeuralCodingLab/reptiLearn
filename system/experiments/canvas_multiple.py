@@ -4,8 +4,8 @@ from canvas import Canvas
 
 
 class TiledCanvas(Canvas):
-    def __init__(self, canvas_id, duration, offset=[0, 0], on_disconnect=None):
-        super().__init__(canvas_id, on_disconnect=on_disconnect)
+    def __init__(self, canvas_id, duration, logger, offset=[0, 0], on_disconnect=None):
+        super().__init__(canvas_id, on_disconnect=on_disconnect, logger=logger)
         self.offset = offset
         self.size = None
         self.on_done = None
@@ -98,7 +98,7 @@ class MultiCanvasExperiment(exp.Experiment):
 
         for i, row in enumerate(ids):
             for j, id in enumerate(row):
-                c = TiledCanvas(id, offset=[i, j], duration=duration / len(ids[i]), on_disconnect=exp.stop_experiment)
+                c = TiledCanvas(id, logger=self.log, offset=[i, j], duration=duration / len(ids[i]), on_disconnect=exp.stop_experiment)
                 self.log.info(f"Waiting for connection with canvas {id}")
                 await c.aio.connected()
                 await c.aio.reset()

@@ -6,7 +6,7 @@ import asyncio
 
 class RandomShapes(Canvas):
     def __init__(self, canvas_id, n_nodes, logger, shape="Circle"):
-        super().__init__(canvas_id, on_connect=self.on_connect, on_disconnect=self.on_disconnect)
+        super().__init__(canvas_id, on_connect=self.on_connect, on_disconnect=self.on_disconnect, logger=logger)
         # self.interval = interval
         self.n_nodes = n_nodes
         self.nodes = None
