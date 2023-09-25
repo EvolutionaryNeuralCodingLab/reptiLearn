@@ -8,7 +8,6 @@ import json
 import time
 import threading
 import asyncio
-from rl_logging import get_main_logger
 
 
 class Canvas:
@@ -34,10 +33,7 @@ class Canvas:
             mqtt.mqtt_json_callback(self.handle_mqtt_response),
         )
 
-        if logger is not None:
-            self.log = logger
-        else:
-            logger = get_main_logger()
+        self.log = logger
 
         self.result_handlers = {}
         self.result_handlers_lock = threading.Lock()
@@ -61,12 +57,13 @@ class Canvas:
         mqtt.client.unsubscribe_callback(self.subscription_topic + "/#")
 
     def handle_mqtt_response(self, topic, payload):
+        # if self.log is not None:
+        #    self.log.debug(f"MQTT message received. canvas={self.canvas_id} topic={topic} payload={payload}")
+
         tlen = len(self.subscription_topic) + 1
         topic = topic[tlen:]
-        # self.log.debug(f"MQTT message received. canvas={self.canvas_id} topic={topic} payload={payload}")
 
         if topic == "result":
-            # self.log.debug(f"Received result: {payload}")
             ts = payload["request"].get("request_timestamp", None)
             if ts is None:
                 return
@@ -81,7 +78,8 @@ class Canvas:
                     del self.error_handlers[ts]
 
         elif topic == "error":
-            self.log.error(f"Received error: {payload}")
+            if self.log is not None:
+                self.log.error(f"Received error: {payload}")
             ts = payload["request"].get("request_timestamp", None)
             if ts is None:
                 return
@@ -144,7 +142,8 @@ class Canvas:
             self.handle_window_on_resize(payload)
 
     def handle_request(self, topic, payload):
-        # self.log.debug(f"MQTT publishing canvas={self.canvas_id} topic={topic} payload={payload}")
+        # if self.log is not None:
+        #    self.log.debug(f"MQTT publishing canvas={self.canvas_id} topic={topic} payload={payload}")
         mqtt.client.publish(f"{self.outgoing_topic}/{topic}", json.dumps(payload))
 
     async def wait(self, fn, *args, timeout=5, **kwargs):
@@ -161,7 +160,8 @@ class Canvas:
             async def set_exception():
                 f.set_exception(Exception(f"Error while waiting: {resp}"))
 
-            self.log.info(f"Error while waiting: {resp}")
+            if self.log is not None:
+                self.log.info(f"Error while waiting: {resp}")
             asyncio.run_coroutine_threadsafe(set_exception(), loop=loop)
 
         fn(*args, **kwargs, on_result=on_result, on_error=on_error)
@@ -189,8 +189,6 @@ class Canvas:
         return ts
 
     def handle_node_event(self, payload):
-        self.log.debug(f"Received event payload={payload}")
-
         if "target" in payload["event"]:
             payload["event"]["target"] = json.loads(payload["event"]["target"])
 
@@ -321,8 +319,6 @@ class Canvas:
 
         with self.node_handlers_lock:
             del self.node_handlers[(node_id, event_name)]
-
-        self.log.debug(f"Removed event handler node_id={node_id} name={event_name}")
 
     def reset(self, on_result=None, on_error=None):
         def handle_result(payload):
