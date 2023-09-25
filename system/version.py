@@ -6,7 +6,7 @@ import dateutil
 
 
 git = os.environ.get("GIT", "git")
-repo = "neural-electrophysiology-tool-team/reptilearn"
+repo = "neural-electrophysiology-tool-team/reptilearn"  # TODO: replace repo
 
 installed_commit_hash = None
 installed_commit_ts = None
