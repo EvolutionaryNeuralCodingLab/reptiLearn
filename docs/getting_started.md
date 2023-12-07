@@ -13,7 +13,7 @@ Follow these steps to install:
 - Open a terminal (git bash on windows), change the directory to where you want to install, and run:
  
  ```bash
- git clone https://github.com/neural-electrophysiology-tool-team/reptilearn
+ git clone https://github.com/EvolutionaryNeuralCodingLab/reptiLearn
  ```
 
 ### Setup Python environment
@@ -157,7 +157,7 @@ CREATE DATABASE reptilearn;
 
 ReptiLearn currently supports real-time object detection using the YOLOv4 neural network model. YOLO can be used to obtain bounding boxes of relevant objects in image streams (such as your subject animals). We use the original darknet version from [this](https://github.com/AlexeyAB/darknet) repository. Darknet requires a CUDA capable GPU, and working installations of NVIDIA CUDA, and cuDNN.
 
-First, configure your cameras or other image sources (see [Camera configuration](docs/camera_config.md) for more information), then follow these steps to setup the model:
+First, configure your cameras or other image sources (see [Camera configuration](camera_config.md) for more information), then follow these steps to setup the model:
 
 - [Compile darknet](https://github.com/AlexeyAB/darknet#how-to-compile-on-linux-using-make). We recommend using the `make` method. Make sure to set `LIBSO=1` in the `Makefile` to compile into a static library.
 
@@ -179,9 +179,9 @@ First, configure your cameras or other image sources (see [Camera configuration]
 
 Assuming everything worked, the YOLOv4 model should now be loaded and you should see a log message in the web app. If you don't see any message, check the terminal window where ReptiLearn is running for any errors coming from the YOLO model. 
 
-NOTE: To use the detection data in real-time or store it you need to run the appropriate experiment. See [Programming experiments](docs/programming_experiments.md) for information about interfacing with image observers.
+NOTE: To use the detection data in real-time or store it you need to run the appropriate experiment. See [Programming experiments](programming_experiments.md) for information about interfacing with image observers.
 
-see [Extending the video system](docs/programming_video_system.md) for information about adding support for additional models.
+see [Extending the video system](programming_video_system.md) for information about adding support for additional models.
 
 ## Remote MQTT broker
 

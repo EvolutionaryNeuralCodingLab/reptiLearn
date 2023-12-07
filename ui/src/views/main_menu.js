@@ -28,13 +28,13 @@ export const MainMenu = () => {
         <RLModal open={openAboutModal} setOpen={setOpenAboutModal} sizeClasses="w-[570px] h-[200px]" paddingClasses="p-0 m-0"  contentOverflowClass="overflow-clip">
             <div className="h-full overflow-visible">
                 <div className="text-6xl z-10 font-[Helvetica] absolute top-5 left-[176px]">
-                    <a href="https://github.com/neural-electrophysiology-tool-team/reptilearn" target="_blank" rel="noreferrer">
+                    <a href="https://github.com/EvolutionaryNeuralCodingLab/reptiLearn" target="_blank" rel="noreferrer">
                         <span className="font-bold">REPTI</span>
                         <span className="font-light">LEARN</span></a>
                     <div className="font-[helvetica] font-extralight text-sm text-right">{timestamp} <span className="font-bold">{commit}</span></div>
                     {not_latest_version && <div className="font-[helvetica] font-bold text-sm text-right">A new version is available!</div>}
                 </div>
-                <a href="https://github.com/neural-electrophysiology-tool-team/reptilearn" target="_blank" rel="noreferrer">
+                <a href="https://github.com/EvolutionaryNeuralCodingLab/reptiLearn" target="_blank" rel="noreferrer">
                     <img src="github-mark.svg" className="text-2xl z-10 font-[Roboto] absolute bottom-4 right-4 h-8 hover:bg-[rgba(93,194,92)] rounded-full" alt="Link to the ReptiLearn github repository" />
                 </a>
                 

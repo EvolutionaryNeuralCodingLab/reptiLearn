@@ -6,7 +6,6 @@ import dateutil
 
 
 git = os.environ.get("GIT", "git")
-repo = "neural-electrophysiology-tool-team/reptilearn"  # TODO: replace repo
 
 installed_commit_hash = None
 installed_commit_ts = None
@@ -22,7 +21,16 @@ def _get_commit_date(cwd=None):
     return execute([git, "show", "-s", "--format=%ci", "HEAD"])
 
 
+def _get_remote_repo(cwd=None):
+    remoteUrl = execute([git, "config", "--get", "remote.origin.url"])
+    remoteUrlSplit = remoteUrl.split("/")
+    if len(remoteUrlSplit) < 2:
+        raise Exception(f"Invalid git repository remote origin url: {remoteUrl}")
+    return "/".join(remoteUrlSplit[-2:])
+
+
 def _get_latest_commit():
+    repo = _get_remote_repo()
     commits = requests.get(
         f"https://api.github.com/repos/{repo}/branches/master"
     ).json()
@@ -45,13 +53,22 @@ def version_check():
         print("WARNING: Error getting commit hash during update check: ", e)
         return
 
-    latest_commit_hash, latest_commit_ts = _get_latest_commit()
+    try:
+        latest_commit_hash, latest_commit_ts = _get_latest_commit()
+    except Exception as e:
+        print("WARNING: Error getting latest remote commit hash: ", e)
 
-    installed_commit_ts = dateutil.parser.parse(installed_commit_ts).astimezone(datetime.timezone.utc)
-    latest_commit_ts = dateutil.parser.parse(latest_commit_ts).astimezone(datetime.timezone.utc)
+    installed_commit_ts = dateutil.parser.parse(installed_commit_ts).astimezone(
+        datetime.timezone.utc
+    )
+    latest_commit_ts = dateutil.parser.parse(latest_commit_ts).astimezone(
+        datetime.timezone.utc
+    )
 
     if latest_commit_hash == installed_commit_hash:
-        print(f"Installed version ({installed_commit_hash[:7]}, {installed_commit_ts}) is up to date.")
+        print(
+            f"Installed version ({installed_commit_hash[:7]}, {installed_commit_ts}) is up to date."
+        )
     else:
         if latest_commit_ts > installed_commit_ts:
             print(
