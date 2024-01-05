@@ -8,6 +8,8 @@ class CanvasVideoExperiment(exp.Experiment):
         "canvas_id": "1",
         "video_url": "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
         "playback_rate": 1,
+        "repeat": False,
+        "background": "#333333",
     }
 
     def on_video_update(self, payload):
@@ -17,42 +19,65 @@ class CanvasVideoExperiment(exp.Experiment):
 
     def on_video_ended(self, payload):
         self.log.info(f"video ended {payload}")
-        exp.next_block()
+        if exp.get_params()["repeat"] is True:
+            # repeat forever
+            self.canvas.play_video("vid")
+        else:
+            exp.next_block()
+
+    def on_mousedown(self, event):
+        self.canvas.tween("vid_rotate", "pause")
+
+    def on_mouseup(self, event):
+        self.canvas.play_tween("vid_rotate")
 
     def video_loadedmetadata(self, payload):
         self.log.info(f"Received video metadata: {payload}")
         metadata = payload["video"]
-        w, h = metadata["width"], metadata["height"]
+        w, h = metadata["width"] // 4, metadata["height"] // 4
         self.canvas.add_video(
             "main",
             "vid",
-            width=w // 4,  # w,
-            height=h // 4,  # h,
-            # x=(self.width - w) // 2,
-            # y=(self.height - h) // 2,
+            x=(self.width) // 2,
+            y=(self.height) // 2,
+            width=w,
+            height=h,
+            offsetX=w // 2,
+            offsetY=h // 2,
             id="vid_node",
         )
+        self.canvas.on("vid_node", "mousedown", self.on_mousedown)
+        self.canvas.on("vid_node", "mouseup", self.on_mouseup)
+
         self.canvas.video_set_props(
             "vid", playbackRate=exp.get_params()["playback_rate"]
         )
+
+        def tween_finished(payload):
+            self.log.info("tween finished")
+            self.canvas.tween("vid_rotate", "reset")
+            self.canvas.play_tween("vid_rotate")
+    
         self.canvas.make_tween(
-            "vid_pos",
+            "vid_rotate",
             node_id="vid_node",
-            x=self.width - w // 4,
-            y=self.height - h // 4,
-            duration=metadata["duration"],
-        )
-        self.canvas.make_tween(
-            "vid_size",
-            node_id="vid_node",
-            width=w,
-            height=h,
             duration=5,
+            rotation=360,
             easing="BounceEaseIn",
+            on_finish=tween_finished
         )
 
-        self.canvas.play_tween("vid_pos")
-        self.canvas.play_tween("vid_size")
+        self.canvas.make_tween(
+            "vid_shrink",
+            node_id="vid_node",
+            w = w / 5,
+            h = h / 5,
+            duration=5,
+            easing="BounceEaseIn",
+            on_finish=tween_finished            
+        )
+
+        self.canvas.play_tween("vid_rotate")
         self.canvas.play_video("vid")
 
     def video_error(self, payload):
@@ -92,15 +117,14 @@ class CanvasVideoExperiment(exp.Experiment):
             "Layer",
             id="main",
         )
+        self.canvas.add("main", "Rect", fill=exp.get_params()["background"], x=0, y=0, width=self.width, height=self.height)
 
     def run_trial(self):
         self.canvas.play_video("vid")
 
     async def end_trial(self):
         self.canvas.pause_video("vid")
-        await self.canvas.aio.video_set_props("vid", currentTime=0)
 
     def end(self):
         self.frame_logger.stop()
-        self.canvas.remove_video("vid")
-        self.canvas.node("vid_node", "destroy")
+        self.canvas.reset()

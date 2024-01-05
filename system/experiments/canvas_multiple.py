@@ -29,7 +29,7 @@ class TiledCanvas(Canvas):
             y=0,
             width=self.size[0],
             height=self.size[1],
-            fill="black",
+            fill=exp.get_params()["background"],
         )
 
         await self.aio.add("stage", "Layer", id="main")
@@ -38,7 +38,7 @@ class TiledCanvas(Canvas):
     async def make_shapes(self, radius):
         r = radius
         x = 0
-        y = self.size[1] // 2 - r // 2
+        y = self.size[1] // 2
 
         await self.aio.add(
             "main",
@@ -46,8 +46,8 @@ class TiledCanvas(Canvas):
             x=x if self.offset[1] == 0 else x - r,
             y=y,
             radius=r,
-            fill="white",
-            stroke="gray",
+            fill=exp.get_params()["fill"],
+            stroke=None,
             id="c",
             visible=False,
         )
@@ -83,7 +83,7 @@ class TiledCanvas(Canvas):
 
 
 class MultiCanvasExperiment(exp.Experiment):
-    default_params = {"canvas_ids": [[1, 2, 3]], "duration": 6, "radius": 30}
+    default_params = {"canvas_ids": [[1, 2, 3]], "duration": 6, "radius": 30, "background": "#ffffff", "fill": "#000000"}
 
     def setup(self):
         self.canvases = None

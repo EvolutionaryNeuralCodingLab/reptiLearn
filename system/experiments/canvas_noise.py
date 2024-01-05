@@ -8,6 +8,7 @@ class CanvasNoiseExperiment(exp.Experiment):
         "fill": "red",
         "duration": 20,
         "max_noise": 10,
+        "background": "black",
     }
 
     async def run_block(self):
@@ -23,6 +24,16 @@ class CanvasNoiseExperiment(exp.Experiment):
         self.height = stage["attrs"]["height"]
         rad = self.width // 6
 
+        await self.canvas.aio.add(
+            "main",
+            "Rect",
+            x=0,
+            y=0,
+            width=self.width,
+            height=self.height,
+            fill=exp.get_params()["background"],
+            id="back"
+        )
         await self.canvas.aio.add(
             "main",
             "Circle",
