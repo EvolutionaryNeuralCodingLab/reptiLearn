@@ -106,6 +106,7 @@ class ImageSource(ConfigurableProcess):
                     - "full_range" (str): Linear scaling which maps 0 to 0 and 65535 to 255.
                     - [a, b] (any two-element sequence): Linear scaling which maps a to 0 and b to 255.
     - video_frame_rate: The number of frames per second. Used for setting the speed of recorded videos.
+    
     See documentation of the ConfigurableProcess class for more information on setting default params and runtime parameter access
 
     To make your own ImageSource subclass override any of the following methods:
