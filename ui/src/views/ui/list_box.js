@@ -4,8 +4,8 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { Listbox } from "@headlessui/react";
 import { classNames, styles } from "./common";
 
-const RLListbox = ({ value, onChange, multiple, children, header, className, portal }) => (
-    <Listbox as="div" value={value} onChange={onChange} multiple={multiple}>
+const RLListbox = ({ value, onChange, multiple, children, header, className, portal, disabled }) => (
+    <Listbox as="div" value={value} onChange={onChange} multiple={multiple} disabled={disabled}>
         <Float
             placement="bottom-start"
             offset={1}
@@ -14,7 +14,7 @@ const RLListbox = ({ value, onChange, multiple, children, header, className, por
             leaveFrom="opacity-100"
             leaveTo="opacity-0">
 
-            <Listbox.Button className={classNames(
+            <Listbox.Button disabled={disabled} className={classNames(
                 "relative cursor-default rounded-[4px] p-px h-[22px] bg-white border border-gray-300 px-2 text-left flex flex-row items-center",
                 className,
                 styles.disabled,
@@ -72,12 +72,13 @@ const HeaderOption = ({ children }) => (
     </Option>
 );
 
-const RLSimpleListbox = ({ placeholder, options, selected, setSelected, header, className, portal, checked=true, optionComponent=null }) => (
+const RLSimpleListbox = ({ placeholder, options, selected, setSelected, header, className, portal, disabled, checked=true, optionComponent=null }) => (
     <RLListbox
         header={options.filter(({ value }) => value === selected)?.[0]?.label || placeholder}
         value={selected}
         onChange={setSelected}
         portal={portal}
+        disabled={disabled}
         className={className}>
         {header && <HeaderOption>{header}</HeaderOption>}
         {options.map(({ label, value, key, title }) => (

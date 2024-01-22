@@ -96,6 +96,7 @@ export const BlockView = ({ idx }) => {
         return <RLSimpleListbox
             placeholder="Override"
             options={RLListbox.valueOnlyOptions(options)}
+            disabled={is_running}
             selected={null}
             setSelected={(key) => add_block_param(key)}
             portal
