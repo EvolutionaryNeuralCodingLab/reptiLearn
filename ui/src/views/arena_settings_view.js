@@ -250,7 +250,7 @@ export const ArenaSettingsView = ({ setOpen, open, isManagingController }) => {
                 <RLButton.ModalButton onClick={() => setOpen(false)}>{dirty ? "Cancel" : "Close"}</RLButton.ModalButton>
             </>
         }>
-            {!isLoadingConfig ? <div className="flex flex-col w-100 overflow-hidden">
+            {!isLoadingConfig ? <div className="flex flex-col w-100 overflow-hidden h-full">
                 {add_modal}
                 <Bar colors="bg-gray-100">
                     <span>Arduino board:</span>
