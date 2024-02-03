@@ -287,7 +287,11 @@ def _init_event_logger(data_dir):
 
 
 async def _async_init_session(continue_session):
-    await await_maybe(cur_experiment.setup)
+    try:
+        await await_maybe(cur_experiment.setup)
+    except Exception:
+        log.exception("Error while running experiment function:")
+
     refresh_actions()
 
     event_logger.log(
@@ -546,11 +550,14 @@ async def _set_phase(block, trial, force_run=False):
         cur_trial = session_state.get("cur_trial", None)
         cur_block = session_state.get("cur_block", None)
 
-        if cur_trial != trial or cur_block != block:
-            await await_maybe(cur_experiment.end_trial)
+        try:
+            if cur_trial != trial or cur_block != block:
+                await await_maybe(cur_experiment.end_trial)
 
-        if cur_block != block:
-            await await_maybe(cur_experiment.end_block)
+            if cur_block != block:
+                await await_maybe(cur_experiment.end_block)
+        except Exception:
+            log.exception("Exception while running experiment:")
 
         num_trials = get_params().get("$num_trials", None)
         if num_trials is not None and trial >= num_trials:
@@ -569,11 +576,14 @@ async def _set_phase(block, trial, force_run=False):
 
         session_state.update((), {"cur_block": block, "cur_trial": trial})
 
-        if cur_block != block or force_run:
-            await await_maybe(cur_experiment.run_block)
+        try:
+            if cur_block != block or force_run:
+                await await_maybe(cur_experiment.run_block)
 
-        if cur_trial != trial or cur_block != block or force_run:
-            await await_maybe(cur_experiment.run_trial)
+            if cur_trial != trial or cur_block != block or force_run:
+                await await_maybe(cur_experiment.run_trial)
+        except Exception:
+            log.exception("Exception while running experiment:")
 
         block_duration = get_params().get("$block_duration", None)
         if block_duration is not None:
@@ -726,7 +736,14 @@ def run_action(label):
 
     - label: The action name (key of the current experiment actions dict).
     """
-    cur_experiment.actions[label]["run"]()
+
+    async def run(label):
+        try:
+            await await_maybe(cur_experiment.actions[label]["run"])
+        except Exception:
+            log.exception(f"Error running action {label}:")
+
+    _run_coroutine(run(label))
 
 
 cached_params = None
