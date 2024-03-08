@@ -1,10 +1,12 @@
 """
 Session and experiment management
+
 Author: Tal Eisenberg, 2021
 
 Responsible for creating/continuing/deleting sessions and loading, running, and managing the
 lifecycle of experiment modules.
 """
+
 from datetime import datetime
 import inspect
 import re
@@ -55,7 +57,13 @@ _on_loop_shutdown = None
 
 
 def _run_coroutine(cor):
-    asyncio.run_coroutine_threadsafe(cor, event_loop)
+    async def try_cor(cor):
+        try:
+            await cor
+        except Exception:
+            log.exception("Error running coroutine:")
+
+    asyncio.run_coroutine_threadsafe(try_cor(cor), event_loop)
 
 
 def init(state_obj, on_loop_shutdown=None):
@@ -166,9 +174,7 @@ def create_session(session_id, experiment):
 
     """
     if session_state.exists(()):
-        raise ExperimentException(
-            "Can't start new session while a session is open."
-        )
+        raise ExperimentException("Can't start new session while a session is open.")
 
     log.info("")
     log.info(f"Starting session {session_id}")
@@ -275,9 +281,9 @@ def _init_event_logger(data_dir):
     event_logger = event_log.EventDataLogger(
         config=get_config(),
         csv_path=csv_path,
-        db_table_name=event_log_config["table_name"]
-        if event_log_config["log_to_db"]
-        else None,
+        db_table_name=(
+            event_log_config["table_name"] if event_log_config["log_to_db"] else None
+        ),
     )
     if not event_logger.start(wait=5):
         raise ExperimentException("Event logger can't connect. Timeout elapsed.")
