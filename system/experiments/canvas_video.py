@@ -57,24 +57,24 @@ class CanvasVideoExperiment(exp.Experiment):
             self.log.info("tween finished")
             self.canvas.tween("vid_rotate", "reset")
             self.canvas.play_tween("vid_rotate")
-    
+
         self.canvas.make_tween(
             "vid_rotate",
             node_id="vid_node",
             duration=5,
             rotation=360,
             easing="BounceEaseIn",
-            on_finish=tween_finished
+            on_finish=tween_finished,
         )
 
         self.canvas.make_tween(
             "vid_shrink",
             node_id="vid_node",
-            w = w / 5,
-            h = h / 5,
+            w=w / 5,
+            h=h / 5,
             duration=5,
             easing="BounceEaseIn",
-            on_finish=tween_finished            
+            on_finish=tween_finished,
         )
 
         self.canvas.play_tween("vid_rotate")
@@ -117,7 +117,15 @@ class CanvasVideoExperiment(exp.Experiment):
             "Layer",
             id="main",
         )
-        self.canvas.add("main", "Rect", fill=exp.get_params()["background"], x=0, y=0, width=self.width, height=self.height)
+        self.canvas.add(
+            "main",
+            "Rect",
+            fill=exp.get_params()["background"],
+            x=0,
+            y=0,
+            width=self.width,
+            height=self.height,
+        )
 
     def run_trial(self):
         self.canvas.play_video("vid")

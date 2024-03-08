@@ -150,7 +150,7 @@ def repeat(callback, args, kwargs, cancel_event, interval, repeats=True):
 
         repeat(callback, interval, repeats=True, pool='experiment', args=(), kwargs={})
 
-    Schedule <callback> to run repeatedly every <interval> seconds.
+    Schedule `callback` to run repeatedly every `interval` seconds.
 
     repeats - True: repeat the schedule until cancelled.
               int: number of times to repeat the schedule.
@@ -181,7 +181,7 @@ def timeofday(callback, args, kwargs, cancel_event, timeofday, repeats=1):
 
         timeofday(callback, timeofday, repeats=1, pool='experiment', args=(), kwargs={})
 
-    Schedule <callback> to run at the next <timeofday>, possibly repeating every 24 hours.
+    Schedule `callback` to run at the next `timeofday`, possibly repeating every 24 hours.
 
     timeofday - Either a datetime.time instance or a sequence of arguments passed to the
                 datetime.time initializer.
@@ -226,7 +226,7 @@ def on_datetime(callback, args, kwargs, cancel_event, dt):
 
         on_datetime(callback, dt, pool='experiment', args=(), kwargs={})
 
-    Schedule <callback> to run at the date and time of dt.
+    Schedule `callback` to run at the date and time of `dt`.
 
     dt - A datetime instance.
     args, kwargs - Arguments that will be passed to the callback function as non-keyword,
@@ -254,7 +254,7 @@ def sequence(callback, args, kwargs, cancel_event, intervals: Sequence, repeats=
 
         sequence(callback, intervals: Sequence, repeats=1, pool='experiment', args=(), kwargs={})
 
-        Run the callback at a sequence of intervals, possibly repeating the sequence once
+        Run `callback` at a sequence of intervals, possibly repeating the sequence once
         it's finished.
 
         intervals - A sequence of intervals in seconds. The schedule will wait the i-th

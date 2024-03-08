@@ -5,7 +5,7 @@ Author: Tal Eisenberg, 2021
 The state store maintains a shared dictionary. Access to the dictionary is synchronized between processes and threads
 by creating a deep copy of the full dictionary on each read, and replacing the full dictionary when updating any of its
 values (i.e. the dictionary is immutable). This makes dictionary access quite slow compared to a local dict, however
-the difference in performance should be negligble for small dictionaries (up to a few thousand elements).
+the difference in performance should be negligible for small dictionaries (up to a few thousand elements).
 
 Since the whole dictionary is copied on every read, and changing any value requires replacing the whole
 dictionary, reading and writing state values should be done using Cursor objects.
@@ -15,7 +15,7 @@ by changing a value from one process and listening for changes of this value fro
 by using the StateDispatcher class.
 
 Module classes:
-- StateStore: Provides an arbitrarly nested dictionary that can be safely accessed by multiple threads
+- StateStore: Provides an arbitrarily nested dictionary that can be safely accessed by multiple threads
               and processes by using a multiprocessing.managers.SyncManager.
 - Cursor: Reading and writing the state store dictionary is done using the Cursor class.
 - StateDispatcher: Makes it possible to register callback functions that will run whenever specific state

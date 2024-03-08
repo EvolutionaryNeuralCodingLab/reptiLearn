@@ -15,12 +15,11 @@ class ObserverTest(exp.Experiment):
         obs_ids = exp.get_params()["obs_ids"]
 
         if obs_ids is None:
-            for obs in vid.image_observers.values():
-                obs.start_observing()
-        else:
-            for obs_id in obs_ids:
-                if obs_id in vid.image_observers:
-                    vid.image_observers[obs_id].start_observing()
+            obs_id = list(vid.image_observers.values())
+
+        for obs_id in obs_ids:
+            if obs_id in vid.image_observers:
+                vid.image_observers[obs_id].start_observing()
 
     def end(self):
         obs_ids = exp.get_params()["obs_ids"]

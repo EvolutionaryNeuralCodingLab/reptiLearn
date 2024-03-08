@@ -1,8 +1,9 @@
 import experiment as exp
 import asyncio
 
+# TODO: add async action
 
-class TestPhasesExperiment(exp.Experiment):
+class AsyncPhasesExperiment(exp.Experiment):
     default_params = {
         "run_msg": "TestExperiment is running",
         "end_msg": "TestExperiment has ended",
@@ -12,6 +13,12 @@ class TestPhasesExperiment(exp.Experiment):
         self.log.info("setup")
         await asyncio.sleep(1)
         self.log.info(".")
+        self.actions["Run me"] = {"run": self.run_me}
+
+    async def run_me(self):
+        self.log.info("async")
+        await asyncio.sleep(1)
+        self.log.info("action")
 
     async def run_trial(self):
         self.log.info(f"run trial: {exp.session_state['cur_trial']}")

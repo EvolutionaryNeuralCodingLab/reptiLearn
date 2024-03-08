@@ -29,11 +29,11 @@ conda env create -f environment.yaml
 
 This should install all the necessary Python dependencies.
 
-### Build the UI webapp
+### Build the Web UI
 
 - Install [Node.js](https://nodejs.org/en/)
 
-- Run the following in a terminal window pointing to the `reptilearn` directory to install node.js dependencies and build the webapp:
+- Run the following in a terminal window pointing to the `reptilearn` directory to install node.js dependencies and build the Web UI:
 
 ```bash
 cd ui
@@ -46,7 +46,7 @@ cd ..
 
 Communication with Arena hardware and other software components (e.g. touchscreen apps) is done using the [MQTT](https://mqtt.org/) protocol. When starting up ReptiLearn it tries to connect to an MQTT broker running on the same machine on the default MQTT port (1883). If a connection was not successful you will see an error message, but other parts of the system can still be used.
 
-We recommend installing [Eclipse Mosquitto](https://mosquitto.org/). To use a broker running on a different machine see [Remote MQTT broker](#remote-mqtt-broker) below for more information.
+We recommend installing the [Eclipse Mosquitto](https://mosquitto.org/) MQTT broker. To use a broker running on a different machine see [Remote MQTT broker](#remote-mqtt-broker) below for more information.
 
 NOTE: ReptiLearn doesn't currently support non-anonymous access to the MQTT broker. If you're using Eclipse Mosquitto and have problem connecting (connection refused), add the following line to your mosquitto.conf file:
 
@@ -89,13 +89,45 @@ Repeat this for each type of board you intend to use.
 IMAGEIO_FFMPEG_EXE=/path/to/ffmpeg/executable
 ```
 
+### Canvas web-app
+
+The Canvas web application allows experiments to display graphics and respond to user events (such as screen touches). 
+NOTE: The app uses MQTT to communicate with ReptiLearn and requires an [MQTT broker](#mqtt-broker-optional).
+
+- Install [Node.js](https://nodejs.org/en/) (skip this if you already installed it in a previous step)
+
+- Run the following in a terminal window pointing to the `reptilearn` directory to install node.js dependencies:
+
+```bash
+cd canvas
+npm install
+```
+
+To run the app, first start the development server:
+
+```bash
+npm run dev
+```
+
+Open a web browser and go to the address that was printed in the terminal (e.g. http://localhost:5173). This should display the settings page. 
+
+- Choose a canvas ID (almost any text should work)
+- Change your MQTT broker settings if it's running on a different host or port.
+- Click on "Connect".
+
+If everything worked correctly you should see a blank screen. You can now open additional canvas windows by entering other canvas IDs.
+
+### Updating ReptiLearn
+
+To update your installation open a terminal pointing to the reptilearn directory and run `git pull`. This should update your clone of the ReptiLearn repository to the latest version. You can see whether your installation is using the latest version by opening the About dialog in the Web UI (click on "About" in the ReptiLearn menu)
+
 ## Configuration
 
 The system uses python modules as configuration files. The default configuration can be found at [system/config/config.py](/system/config/config.py). You would probably want to make some changes before running for the first time. It's possible to make changes directly in the default config file, but we recommend creating a new config file (e.g. system/config/my_config.py). 
 
-Any values not defined in the new config file will be taken from the default config file. To use the new config, run with a `--config my_config` command line argument (see [Running](#running) below).
+To use the new config, run with a `--config my_config` command line argument (see [Running](#running) below). Any values not defined in the new config file will be taken from the default config file. 
 
-For example, this is how a config file that only changes the web server port value would look like:
+For example, the following config file only changes the web server port value:
 ```python
 web_ui = {
     "port": 3501,
@@ -195,7 +227,7 @@ mqtt = {
 }
 ```
 
-You will also need to change these values in the arena controller configuration file at `reptilearn/arena/config.py`:
+You will also need to change these values in the arena controller configuration file at [`reptilearn/arena/config.py`](../arena/config.py):
 
 ```python
 # MQTT settings
@@ -208,4 +240,4 @@ mqtt = {
 }
 ```
 
-After restarting ReptiLearn it should use the new broker configuration.
+After restarting ReptiLearn it should now use the new broker configuration.

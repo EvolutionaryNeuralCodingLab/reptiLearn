@@ -1,4 +1,4 @@
-# Experiment Programming Guide
+# Experiment Programming Guide - OLD
 
 ## Starting the system
 
@@ -50,13 +50,13 @@ To define default experiment parameters add a dictionary as a `default_params` c
 class MyExperiment(experiment.Experiment):
     default_params = {
             "param1": param1-value,
-	            "param2": param2-value,
-		            ...
+	        "param2": param2-value,
+		    ...
 	}
 
     default_blocks = [
             {"param1": overridden-param1-value, "param3": some-value},
-	            {"param2": overridden-param2-value, "param4": some-value},
+	        {"param2": overridden-param2-value, "param4": some-value},
 	]
 ```
 
@@ -74,7 +74,7 @@ The current state of the system is shown in the web-ui in the state section (und
 
 ## Data collection and storage
 
-Whenever an experiment is starting, a data directory is created for it under the experiment data root directory (determined by the `exepriment_data_root` config attribute). The directory name is based on the experiment id (which can be set in the web-ui), and it's stored in the state path `("experiment", "data_dir")`.
+Whenever an experiment is starting, a data directory is created for it under the experiment data root directory (determined by the `experiment_data_root` config attribute). The directory name is based on the experiment id (which can be set in the web-ui), and it's stored in the state path `("experiment", "data_dir")`.
 
 Once the directory was created, any data will be stored inside it. This could include recorded videos and images, the log file (`experiment.log`), the event log and any other data logs (see below).
 
@@ -93,7 +93,7 @@ The event log is a special DataLogger that can be used to automatically log an e
 ### Video recordings and snapshots
 
 Synchronized video recording from multiple image sources (see below) is handled by the `video_record` module. The recorder can be configured under the `video_record` config attribute. To start and stop recording use the `video_record.start_record` and `stop_record` functions. Image sources can be selected from the web-ui, by explicitly listing them in `start_record` or by using `video_record.set_selected_sources`, `video_record.select_source`, or `video_record.unselect_source`. 
-If the cameras are configured to synchornize with a ttl trigger, it can be started and stopped using `video_record.start_trigger`, and `video_record.stop_strigger`, or by clicking the trigger button in the web-ui. When the trigger is already running before starting a recording, it will automatically pause, and start once the recording starts. 
+If the cameras are configured to synchronize with a ttl trigger, it can be started and stopped using `video_record.start_trigger`, and `video_record.stop_trigger`, or by clicking the trigger button in the web-ui. When the trigger is already running before starting a recording, it will automatically pause, and start once the recording starts. 
 
 To take a single snapshot of the current image for each selected image source use `video_record.save_image`. A single image for each source will be saved in the experiment data directory.
 

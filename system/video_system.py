@@ -184,9 +184,9 @@ def _update_acquire_callback(src_id):
 def update_video_config(config: dict, save=True):
     """
     Shutdown the video system and then restart it according to `config`. This includes stopping
-    all observer and source processes, and start new processes.
+    all observer and source processes, and starting new processes.
 
-    After the system starts succesfully the new `config` is stored in the video config file.
+    Once the system successfully starts, the new `config` is stored in the video config file.
 
     Args:
     - config: Video configuration dict.

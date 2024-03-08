@@ -360,6 +360,7 @@ class _ImageObserverInterface:
         - fn: A function with signature (output, timestamp).
             - output: a reference to the observer's output buffer (on main process)
             - timestamp: The timestamp of the current output data as seconds since epoch
+        - state: reference to a Cursor object for accessing observer events.
 
         Return:
         A remove_listener() function to remove this listener
