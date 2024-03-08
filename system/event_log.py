@@ -3,6 +3,7 @@ A data logger for logging experiment events.
 
 Author: Tal Eisenberg, 2021
 """
+
 import multiprocessing as mp
 import functools
 import threading
@@ -177,7 +178,7 @@ class EventDataLogger(DataLogger):
                 pass
             else:
                 if event is not None:
-                    self.logger.debug(f"Logging event: {event}")
+                    self._logger.debug(f"Logging event: {event}")
                     return (
                         event[0],
                         event[1],

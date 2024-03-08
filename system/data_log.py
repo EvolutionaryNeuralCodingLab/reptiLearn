@@ -3,6 +3,7 @@ Data logging processes
 
 Author: Tal Eisenberg, 2021
 """
+
 import csv
 from datetime import datetime
 from pathlib import Path
@@ -51,19 +52,19 @@ class DataLogger(mp.Process):
             self.csv_path = None
 
         self.split_csv = split_csv
-        self.logger = None
+        self._logger = None
         self._logger_configurer = rl_logging.get_logger_configurer()
-        self.config = get_config().database
+        self._db_config = get_config().database
         super().__init__()
 
     def _init_log(self):
-        self.logger = self._logger_configurer.configure_child(self.name)
-        self.logger.debug("Initializing data logger...")
+        self._logger = self._logger_configurer.configure_child(self.name)
+        self._logger.debug("Initializing data logger...")
         self.con = None
 
         if self.db_table_name:
             try:
-                self.con = db.make_connection(**self.config)
+                self.con = db.make_connection(**self._db_config)
 
                 db.with_commit(
                     self.con,
@@ -74,7 +75,7 @@ class DataLogger(mp.Process):
                     if_not_exists=True,
                 )
             except NameError:
-                self.logger.warning(
+                self._logger.warning(
                     "Can't load psycopg2 library. Database logging will not be available."
                 )
         if self.csv_path is not None:
@@ -115,7 +116,7 @@ class DataLogger(mp.Process):
                     "time",
                 )
             except Exception:
-                self.logger.exception("While inserting row to database:")
+                self._logger.exception("While inserting row to database:")
 
         if self.csv_writer is not None:
             self.csv_writer.writerow(data)
@@ -125,13 +126,13 @@ class DataLogger(mp.Process):
         self._init_log()
         self._on_start()
 
-        self.logger.debug("Data logger started.")
+        self._logger.debug("Data logger started.")
 
         while True:
             data = self._get_data()
 
             if data is None:
-                self.logger.debug("Stopping data logger.")
+                self._logger.debug("Stopping data logger.")
                 break
             else:
                 self._write(data)
@@ -229,27 +230,27 @@ class ObserverLogger(QueuedDataLogger):
         - image_observer: The image observer that will be logged
         """
         super().__init__(columns, csv_path, split_csv, db_table_name)
-        self.obs_communicator = image_observer.get_interface()
-        self.state_address = image_observer.state_store_address
-        self.state_authkey = image_observer.state_store_authkey
+        self._obs_communicator = image_observer.get_interface()
+        self._state_address = image_observer.state_store_address
+        self._state_authkey = image_observer.state_store_authkey
 
-        self.time_index = None
+        self._time_index = None
         for i, c in enumerate(columns):
             if type(c) is tuple:
                 c = c[0]
 
             if c == "time":
-                self.time_index = i
+                self._time_index = i
                 break
 
-        if self.time_index is None:
+        if self._time_index is None:
             raise ValueError("Missing 'time' column in columns argument.")
 
     def _on_start(self):
         self.state = managed_state.Cursor(
-            (), authkey=self.state_authkey, address=self.state_address
+            (), authkey=self._state_authkey, address=self._state_address
         )
-        self.remove_listener = self.obs_communicator.add_listener(
+        self.remove_listener = self._obs_communicator.add_listener(
             self._on_observer_update, self.state
         )
 
@@ -258,5 +259,5 @@ class ObserverLogger(QueuedDataLogger):
 
     def _on_observer_update(self, output, timestamp):
         out_list: list = output.tolist()
-        out_list.insert(self.time_index, timestamp)
+        out_list.insert(self._time_index, timestamp)
         self.log(out_list)
