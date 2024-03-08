@@ -22,7 +22,6 @@ __ReptiLearn__ was created to help us run continuous, long-term, learning experi
 - [Camera configuration](docs/camera_config.md)
 - [Setting up the arena controller](docs/arena_setup.md)
 - [Programming experiments](docs/programming_experiments.md)
-- [Extending the video system](docs/programming_video_system.md)
-- [Scheduling tasks](docs/adding_tasks.md)
+
 
 

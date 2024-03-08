@@ -1,3 +1,0 @@
-# Extending the video system
-
-Coming soon...
