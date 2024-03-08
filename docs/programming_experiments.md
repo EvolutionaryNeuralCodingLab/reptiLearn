@@ -1,6 +1,50 @@
-# Programming experiments
+# Programming experiments <!-- omit in toc -->
+
+This document should help you get started with creating new experiments for ReptiLearn.
+
+## Table of contents <!-- omit in toc -->
+
+- [ReptiLearn sessions and experiments](#reptilearn-sessions-and-experiments)
+  - [Creating a new experiment module](#creating-a-new-experiment-module)
+  - [Running an experiment session](#running-an-experiment-session)
+  - [Reloading the experiment code](#reloading-the-experiment-code)
+- [The Experiment class](#the-experiment-class)
+  - [Experiment session lifecycle](#experiment-session-lifecycle)
+  - [Experiment parameters](#experiment-parameters)
+    - [Built-in parameters](#built-in-parameters)
+- [State store](#state-store)
+  - [Accessing the state store](#accessing-the-state-store)
+  - [State change notifications](#state-change-notifications)
+  - [Store internals (advanced)](#store-internals-advanced)
+- [Controlling the experiment flow](#controlling-the-experiment-flow)
+- [Scheduling](#scheduling)
+  - [once()](#once)
+  - [repeat()](#repeat)
+  - [timeofday() and on\_datetime()](#timeofday-and-on_datetime)
+  - [sequence()](#sequence)
+  - [Scheduling with asyncio](#scheduling-with-asyncio)
+- [Actions](#actions)
+- [Video system](#video-system)
+  - [Adding an ImageSource](#adding-an-imagesource)
+  - [Video recording](#video-recording)
+  - [Image capture](#image-capture)
+  - [Adding an ImageObserver](#adding-an-imageobserver)
+  - [Interacting with an ImageObserver](#interacting-with-an-imageobserver)
+  - [Creating a new ImageObserver class](#creating-a-new-imageobserver-class)
+  - [Creating a new ImageSource class](#creating-a-new-imagesource-class)
+  - [Reloading sources and observers](#reloading-sources-and-observers)
+- [Arena controller](#arena-controller)
+  - [Reading arduino state](#reading-arduino-state)
+  - [Creating new interfaces](#creating-new-interfaces)
+- [Data logging](#data-logging)
+  - [Event logger](#event-logger)
+  - [ImageObserver loggers](#imageobserver-loggers)
+  - [Custom data loggers](#custom-data-loggers)
+- [Graphical interfaces with Canvas](#graphical-interfaces-with-canvas)
+
 
 ## ReptiLearn sessions and experiments
+
 ### Creating a new experiment module
 
 When a new ReptiLearn session is created the user can choose an experiment class that will run during the session. The class determines the behavior of the experiment and includes functions that run in response to various events. To add a new experiment class create a new python module inside [`/system/experiments`](../system/experiments/) (for example `my_experiment.py`). The experiment file must include a single subclass of the [Experiment](../system/experiment.py#802) class. Here's an example for an experiment that does nothing:
