@@ -52,7 +52,7 @@ class VideoImageSource(ImageSource):
                         int(vcap.get(cv2.CAP_PROP_FRAME_WIDTH)),
                     )
             vcap.release()
-
+        
         super()._init()
 
     def _on_start(self):
@@ -76,7 +76,10 @@ class VideoImageSource(ImageSource):
             self.vcap.set(cv2.CAP_PROP_FRAME_WIDTH, self.image_shape[1])
             self.vcap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.image_shape[0])
             # print(self.vcap.get(cv2.CAP_PROP_FPS), self.vcap.get(cv2.CAP_PROP_FOURCC), self.vcap.get(cv2.CAP_PROP_FRAME_WIDTH), self.vcap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-
+        else:
+            if self.frame_rate is None:
+                self.frame_rate = self.vcap.get(cv2.CAP_PROP_FPS)
+        
         self.frame_num = self.start_frame
         self.repeat_count = 0
         self.last_acquire_time = None
