@@ -3,6 +3,7 @@ import os
 from execute import execute
 import requests
 import dateutil
+import subprocess
 
 
 git = os.environ.get("GIT", "git")
@@ -26,15 +27,38 @@ def _get_remote_repo(cwd=None):
     remoteUrlSplit = remoteUrl.split("/")
     if len(remoteUrlSplit) < 2:
         raise Exception(f"Invalid git repository remote origin url: {remoteUrl}")
+    for i, r in enumerate(remoteUrlSplit):
+        if r[-4:] == ".git":
+            remoteUrlSplit[i] = r[:-4]
     return "/".join(remoteUrlSplit[-2:])
 
 
-def _get_latest_commit():
+def _get_current_branch():
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=True
+        )
+        return result.stdout.strip()
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Error getting current branch: {e.stderr.strip()}")
+
+def _get_latest_commit(branch=None):
     repo = _get_remote_repo()
-    commits = requests.get(
-        f"https://api.github.com/repos/{repo}/branches/master"
-    ).json()
-    return commits["commit"]["sha"], commits["commit"]["commit"]["author"]["date"]
+    if not branch:
+        branch = _get_current_branch()
+    response = requests.get(
+        f"https://api.github.com/repos/{repo}/branches/{branch}"
+    )
+
+    if response.status_code == 200:
+        commits = response.json()
+        return commits["commit"]["sha"], commits["commit"]["commit"]["author"]["date"]
+    else:
+        raise ValueError(f"Error fetching commits from branch '{branch}': {response.status_code}")
 
 
 def version_check():
