@@ -1,0 +1,183 @@
+{
+    "arena": {
+        "allow_get": true,
+        "fqbn": "arduino:megaavr:nona4809",
+        "interfaces": [
+            {
+                "command": "dispense",
+                "icon": "gift",
+                "name": "Feeder 1",
+                "pins": [
+                    9,
+                    10,
+                    11,
+                    12
+                ],
+                "type": "feeder",
+                "ui": "action"
+            },
+            {
+                "command": "dispense",
+                "icon": "gift",
+                "name": "Feeder 2",
+                "pins": [
+                    5,
+                    6,
+                    7,
+                    8
+                ],
+                "type": "feeder",
+                "ui": "action"
+            },
+            {
+                "name": "Cue LED",
+                "pin": 4,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "AC Line 1",
+                "pin": 3,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "AC Line 2",
+                "pin": 13,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "icon": "thermometer-half",
+                "name": "Temp",
+                "pin": 2,
+                "type": "dallas_temperature",
+                "ui": "sensor",
+                "unit": "\u00b0"
+            }
+        ],
+        "serial_number": "1107E314515146544E4B2020FF0C3E57"
+    },
+    "camera_trigger": {
+        "allow_get": false,
+        "fqbn": "arduino:megaavr:nona4809",
+        "interfaces": [
+            {
+                "name": "Camera Trigger",
+                "pin": 12,
+                "pulse_len": 20,
+                "pulse_width": 0.2,
+                "serial_trigger": false,
+                "type": "trigger",
+                "ui": "camera_trigger"
+            }
+        ],
+        "serial_number": "715B0511515146544E4B2020FF0C265A"
+    },
+    "door": {
+        "allow_get": true,
+        "fqbn": "arduino:megaavr:nona4809",
+        "interfaces": [
+            {
+                "icon": "gift",
+                "name": "Door1",
+                "type": "DCDoor",
+                "ui": "action",
+                "close_pin": 10,
+                "open_pin": 9
+            }
+        ],
+        "serial_number": "F4D0017951544E474D202020FF0E0621"
+    },
+    "light_matrix": {
+        "allow_get": true,
+        "fqbn": "arduino:megaavr:nona4809",
+        "interfaces": [
+            {
+                "name": "Light0",
+                "pin": 2,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light1",
+                "pin": 3,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light2",
+                "pin": 4,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light3",
+                "pin": 5,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light4",
+                "pin": 6,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light5",
+                "pin": 7,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light6",
+                "pin": 8,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light7",
+                "pin": 9,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light8",
+                "pin": 10,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light9",
+                "pin": 11,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light10",
+                "pin": 12,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            },
+            {
+                "name": "Light11",
+                "pin": 13,
+                "reverse": true,
+                "type": "line",
+                "ui": "toggle"
+            }
+        ],
+        "serial_number": "98DCD2EF514E4650414B2020FF0E0C24"
+    },
+}
