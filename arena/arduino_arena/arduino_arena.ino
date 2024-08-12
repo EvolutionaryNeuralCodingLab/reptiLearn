@@ -16,13 +16,16 @@
 #include <ArduinoJson.h>
 #include "send.h"
 #include "Interface.h"
-
+#include <Wire.h>
 // To remove any unused interface type, simply comment its include line below:
 #include "LineInterface.h"
 #include "TriggerInterface.h"
 #include "FeederInterface.h"
 #include "DallasTemperatureInterface.h"
 #include "MuxInterface.h"
+#include "LIS3MDLInterface.h"
+#include "DCDoor.h"
+
 
 static const int MAX_INTERFACES = 32;
 
@@ -32,7 +35,7 @@ unsigned long last_config_request_time = 0;
 
 void setup() {
   Serial.begin(115200);
-
+  Wire.begin();
   while (!Serial) continue;
   request_configuration();
 }
@@ -183,6 +186,20 @@ void parse_interface_config(JsonObject conf) {
   #ifdef MuxInterface_h
   if (conf["type"] == "mux") {
     add_interface(new MuxInterface(conf));
+    return;
+  }
+  #endif
+
+  #ifdef LIS3MDLInterface_h
+  if (conf["type"] == "lis3mdl") {
+    add_interface(new LIS3MDLInterface(conf));
+    return;
+  }
+  #endif
+
+  #ifdef DCDoor_h
+  if (conf["type"] == "dcdoor") {
+    add_interface(new DCDoor(conf));
     return;
   }
   #endif

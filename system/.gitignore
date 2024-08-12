@@ -1,6 +1,7 @@
 videos/
 media/
 config/*.json
+!config/example_config.json
 *.avi
 *.mp4
 *.sh

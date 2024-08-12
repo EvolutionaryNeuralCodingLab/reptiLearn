@@ -3,7 +3,7 @@
 #include "DCDoor.h"
 #include "Interface.h"
 
-DCDoor::DCDoor(JsonObject conf) : Interface("DCDoor", strdup(conf["name"].as<const char*>()))
+DCDoor::DCDoor(JsonObject conf) : Interface("dcdoor", strdup(conf["name"].as<const char*>()))
 {
     if (!conf.containsKey("open_pin")) {
     send_error("Missing 'open_pin' key in config");
