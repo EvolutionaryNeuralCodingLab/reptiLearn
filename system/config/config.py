@@ -90,14 +90,14 @@ video_record = {
             "macro_block_size": 1,
             "pixelformat": "bgr0",
             "ffmpeg_log_level": "warning",
-            "output_params": ["-preset", "slow", "-qp", "30", "-rc", "constqp"],
+            "output_params": ["-preset", "slow", "-qp", "30"], # -rc constqp removed, but you can control the rate using the -qp (constant quantization parameter) or -b:v options
         },
         "color": {
             "codec": "h264_nvenc",
             "quality": None,
             "macro_block_size": 1,
             "ffmpeg_log_level": "warning",
-            "output_params": ["-preset", "slow", "-qp", "30", "-rc", "constqp"],
+            "output_params": ["-preset", "slow", "-qp", "30"], # -rc constqp removed, but you can control the rate using the -qp (constant quantization parameter) or -b:v options
         },
     },
 }
