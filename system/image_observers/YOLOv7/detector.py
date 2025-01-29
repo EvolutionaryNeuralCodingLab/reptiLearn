@@ -6,10 +6,41 @@ import sys
 from pathlib import Path
 
 
+def letterbox(img: np.ndarray, new_shape=(640, 640), color=(114,), auto=True, stride=32):
+    """
+    Resize and pad image while meeting stride-multiple constraints.
+    Modified for grayscale input.
+    """
+    shape = img.shape[:2]  # current shape [height, width]
+
+    if isinstance(new_shape, int):
+        new_shape = (new_shape, new_shape)
+
+    # Scale ratio (new / old)
+    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
+
+    # Compute padding
+    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
+    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
+
+    if auto:  # minimum rectangle
+        dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
+
+    dw /= 2  # divide padding into 2 sides
+    dh /= 2
+
+    if shape[::-1] != new_unpad:  # resize
+        img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
+    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
+    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
+    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
+    return img
+
+
 class YOLOv7Detector:
     def __init__(self, model_path: str, yolov7_path: str, device: str = 'cuda' if torch.cuda.is_available() else 'cpu'):
         """
-        Initialize YOLOv7 detector
+        Initialize YOLOv7 detector for grayscale images
 
         Args:
             model_path: Path to the trained YOLOv7 weights
@@ -18,9 +49,10 @@ class YOLOv7Detector:
         """
         # Add YOLOv7 to path
         yolov7_path = Path(yolov7_path)
-        if not yolov7_path.exists():
-            raise FileNotFoundError(f"YOLOv7 path does not exist: {yolov7_path}")
+        # if not yolov7_path.exists():
+        #     raise FileNotFoundError(f"YOLOv7 path does not exist: {yolov7_path}")
         sys.path.append(str(yolov7_path))
+
 
         # Import YOLOv7 modules
         from image_observers.yolov7.models.experimental import attempt_load
@@ -30,19 +62,53 @@ class YOLOv7Detector:
         self.device = select_device(device)
 
         # Load model
-        self.model = attempt_load(model_path)#, device=self.device)
+        self.model = attempt_load(model_path)
+
+        # Modify first layer for grayscale input if needed
+        if self.model.model[0].conv.in_channels == 3:
+            print("Converting model from RGB to grayscale input")
+            self._convert_to_grayscale()
+
         self.stride = int(self.model.stride.max())
         self.img_size = check_img_size(640, s=self.stride)  # Ensure image size is multiple of stride
+
+        if self.device.type != 'cpu':
+            self.model(
+                torch.zeros(1, 1, self.img_size, self.img_size).to(self.device).type_as(next(self.model.parameters())))
 
         # Get model info
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
 
+    def _convert_to_grayscale(self):
+        """Convert the first layer of the model to accept grayscale input"""
+        # Get the first conv layer
+        first_conv = self.model.model[0].conv
+
+        # Create new conv layer with 1 input channel
+        new_conv = torch.nn.Conv2d(
+            in_channels=1,
+            out_channels=first_conv.out_channels,
+            kernel_size=first_conv.kernel_size,
+            stride=first_conv.stride,
+            padding=first_conv.padding,
+            bias=True if first_conv.bias is not None else False
+        ).to(self.device)
+
+        # Average the weights across the RGB channels
+        if first_conv.weight.shape[1] == 3:  # If it was previously RGB
+            new_conv.weight.data = first_conv.weight.data.sum(dim=1, keepdim=True) / 3.0
+            if first_conv.bias is not None:
+                new_conv.bias.data = first_conv.bias.data
+
+        # Replace the first conv layer
+        self.model.model[0].conv = new_conv
+
     def detect(self, image: np.ndarray, conf_threshold: float = 0.25) -> List[Dict[str, Union[float, List[float]]]]:
         """
-        Detect objects in an image
+        Detect objects in a grayscale image
 
         Args:
-            image: Input image in BGR format (OpenCV default)
+            image: Input image in grayscale format
             conf_threshold: Confidence threshold for detections
 
         Returns:
@@ -54,17 +120,22 @@ class YOLOv7Detector:
                 - class_name: Class name from model's names list
         """
         # Import here to avoid circular imports
-        from image_observers.yolov7.utils.general import non_max_suppression, scale_coords
-
+        from utils.general import non_max_suppression, scale_coords
 
         # Get original image dimensions
         height, width = image.shape[:2]
 
-        # Preprocess image
-        img = letterbox(image, self.img_size, stride=self.stride, auto=True)[0]
-        # img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
-        img = np.ascontiguousarray(img)
+        # Ensure image is 2D grayscale
+        if len(image.shape) == 3:
+            if image.shape[2] == 3:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            elif image.shape[2] == 1:
+                image = image.squeeze()
 
+        # Preprocess image
+        img = letterbox(image, self.img_size, stride=self.stride)
+        img = img[None]  # Add channel dimension
+        img = np.ascontiguousarray(img)
         img = torch.from_numpy(img).to(self.device)
         img = img.float()
         img /= 255.0
@@ -76,7 +147,7 @@ class YOLOv7Detector:
             pred = self.model(img)[0]
 
         # Apply NMS
-        pred = non_max_suppression(pred, conf_threshold)
+        pred = non_max_suppression(pred, conf_thres=conf_threshold)
 
         # Process detections
         detections = []
@@ -108,34 +179,3 @@ class YOLOv7Detector:
                 })
 
         return detections
-
-
-def letterbox(img: np.ndarray, new_shape=(640, 640), color=(114, 114, 114), auto=True, stride=32):
-    """
-    Resize and pad image while meeting stride-multiple constraints.
-    Returns resized and padded image.
-    """
-    shape = img.shape[:2]  # current shape [height, width]
-
-    if isinstance(new_shape, int):
-        new_shape = (new_shape, new_shape)
-
-    # Scale ratio (new / old)
-    r = min(new_shape[0] / shape[0], new_shape[1] / shape[1])
-
-    # Compute padding
-    new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-    dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
-
-    if auto:  # minimum rectangle
-        dw, dh = np.mod(dw, stride), np.mod(dh, stride)  # wh padding
-
-    dw /= 2  # divide padding into 2 sides
-    dh /= 2
-
-    if shape[::-1] != new_unpad:  # resize
-        img = cv2.resize(img, new_unpad, interpolation=cv2.INTER_LINEAR)
-    top, bottom = int(round(dh - 0.1)), int(round(dh + 0.1))
-    left, right = int(round(dw - 0.1)), int(round(dw + 0.1))
-    img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color)
-    return img

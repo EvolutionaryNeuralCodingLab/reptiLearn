@@ -4,7 +4,7 @@ import video_system
 import data_log
 import experiment as exp
 from pathlib import Path
-import logging
+
 import torch
 
 class YOLOv4ImageObserver(ImageObserver):
@@ -59,74 +59,99 @@ def _release(self):
 
 
 class YOLOv7ImageObserver(ImageObserver):
+    """
+    YOLOv7 object detector that outputs bounding box coordinates and confidence.
+    Output format: [x1, y1, x2, y2, confidence] in normalized coordinates.
+    """
+
     default_params = {
         **ImageObserver.default_params,
-        "model_path": "/home/tal/dev/reptiLearn/system/image_observers/yolov7/turtle_test.pt",
-        "yolov7_path": "/home/tal/dev/reptiLearn/system/image_observers/yolov7",
+        "model_path": "/home/tal/dev/yolov7/turtle_test.pt",
+        "yolov7_path": "/home/tal/dev/yolov7",
         "conf_thres": 0.5,
         "device": "cuda"  # or "cpu"
     }
 
     def _init(self):
-        from image_observers.YOLOv7.detector import YOLOv7Detector
-
-        from pathlib import Path
+        """Initialize the YOLOv7 detector"""
         super()._init()
-        # yolo_config = dict(self.config
-        #
-        # del yolo_config["src_id"]
-        # del yolo_config["class"]
 
+        # Setup logging
+        # self.log = logging.getLogger(self.name)
+        
 
-        # Expand paths
-        model_path = Path(self.default_params["model_path"]).expanduser()
-        yolov7_path = Path(self.default_params["yolov7_path"]).expanduser()
+        # try:
+            # Expand paths
+            # model_path = Path(self.default_params["model_path"]).expanduser()
+            # yolov7_path = Path(self.default_params["yolov7_path"]).expanduser()
 
-
+            # self.log.info(f"Initializing YOLOv7 detector with model: {model_path}")
+        from image_observers.YOLOv7.detector import YOLOv7Detector
         # Initialize detector
         self.detector = YOLOv7Detector(
-            model_path=str(model_path),
-            yolov7_path=str(yolov7_path)
+            model_path=str(self.default_params["model_path"]),
+            yolov7_path=str(self.default_params["yolov7_path"])
         )
 
-        # Initialize empty output array for when no detections are found
-        self.nan_det = np.empty((5,), dtype=np.float64)
-        self.nan_det[:] = np.nan
+            # Initialize empty output array for when no detections are found
+
+
+            # self.log.info("YOLOv7 detector initialized successfully")
+        #
+        # except Exception as e:
+        #     error = f"Failed to initialize YOLOv7 detector: {str(e)}"
+        #     self.log.error(error)
+        #     raise
 
     def _setup(self):
-        # No separate load step needed as model is loaded in __init__
-        self.log.info(
-            f"YOLOv7 detector loaded successfully (640x640 model)."
-        )
+        """Called when the observer process starts"""
+        try:
+            self.log.info(
+                f"YOLOv7 detector loaded successfully (640x640 model)."
+            )
+        except Exception as e:
+            self.log.error(f"Setup failed: {str(e)}")
+            raise
 
     def _on_start(self):
+        """Called when observation starts"""
         self.log.info("Starting object detection.")
 
     def _on_stop(self):
+        """Called when observation stops"""
         self.log.info("Stopping object detection.")
 
-    def _on_image_update(self, img, _):
-        # Convert 16-bit images to 8-bit if necessary
-        if img.dtype == "uint16":
-            img = (img / 256.0).astype("uint8")
-        self.log.info(f"cuda: {torch.cuda.is_available()}")
-        # Run detection
-        detections = self.detector.detect(img)
+    def _on_image_update(self, img, timestamp):
+        """Process new image and update output buffer"""
+        try:
+            # Convert 16-bit images to 8-bit if necessary
+            if img.dtype == "uint16":
+                img = (img / 256.0).astype("uint8")
 
-        if not detections:
+            # Run detection
+            detections = self.detector.detect(img, conf_threshold=self.config["conf_thres"])
+
+            if not detections:
+                self._update_output(self.nan_det)
+                return
+
+            # Get the detection with highest confidence
+            best_detection = max(detections, key=lambda x: x['confidence'])
+
+            # Format output as [x1, y1, x2, y2, confidence]
+            output = np.array(best_detection['bbox'] + [best_detection['confidence']], dtype=np.float64)
+            self._update_output(output)
+
+        except Exception as e:
+            self.log.error(f"Error during image processing: {str(e)}")
             self._update_output(self.nan_det)
-            return
-
-        # Get the detection with highest confidence
-        best_detection = max(detections, key=lambda x: x['confidence'])
-
-        # Format output as [x1, y1, x2, y2, confidence]
-        output = np.array(best_detection['bbox'] + [best_detection['confidence']], dtype=np.float64)
-        self._update_output(output)
 
     def _get_buffer_opts(self):
         return "d", 5, 5, np.double
 
+def _release(self):
+    """Cleanup when the observer is shut down"""
+    self.log.info("Releasing YOLOv7 detector resources.")
 
 class BBoxDataCollector:
     def __init__(self, obs_id):
