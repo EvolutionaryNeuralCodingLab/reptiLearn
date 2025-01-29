@@ -31,12 +31,12 @@ class YOLOTestExperiment(exp.Experiment):
         self.log.info(f"cuda: {torch.cuda.is_available()}")
         self.bbox_collector = BBoxDataCollector("1")
         self.print_next_detection = False
-        self.observer = self.bbox_collector
-        # self.observer = vid.image_observers[params["obs_id"]]
+        self.bbox_collector = self.bbox_collector
+        # self.bbox_collector = vid.image_observers[params["obs_id"]]
         # if not params["detection_threshold"]:
         #     raise ValueError(f"Detection threshold must be set")
-        # self.observer.config["conf_thres"] = params["detection_threshold"]
-        # self.log.info(f"Detection threshold: {self.observer.config['conf_thres']}")
+        # self.bbox_collector.config["conf_thres"] = params["detection_threshold"]
+        # self.log.info(f"Detection threshold: {self.bbox_collector.config['conf_thres']}")
 
         # Initialize detection counter
         self.detection_count = 0
@@ -47,8 +47,8 @@ class YOLOTestExperiment(exp.Experiment):
         params = exp.get_params()
 
         # Start the observer
-        self.observer.start(self.on_detection)
-        # self.observer.start_observing()
+        self.bbox_collector.start(self.on_detection)
+        # self.bbox_collector.start_observing()
 
         self.log.info(f"Starting YOLO test with confidence threshold {params['detection_threshold']}")
 
