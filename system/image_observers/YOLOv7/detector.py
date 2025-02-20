@@ -59,7 +59,7 @@ class YOLOv7Detector:
         from image_observers.yolov7.utils.general import check_img_size
         from image_observers.yolov7.utils.torch_utils import select_device
 
-        self.device = select_device(device)
+        # self.device = torch.device
 
         # Load model
         self.model = attempt_load(model_path)
@@ -72,9 +72,9 @@ class YOLOv7Detector:
         self.stride = int(self.model.stride.max())
         self.img_size = check_img_size(640, s=self.stride)  # Ensure image size is multiple of stride
 
-        if self.device.type != 'cpu':
-            self.model(
-                torch.zeros(1, 1, self.img_size, self.img_size).to(self.device).type_as(next(self.model.parameters())))
+        # if self.device.type != 'cpu':
+        #     self.model(
+        #         torch.zeros(1, 1, self.img_size, self.img_size).to(self.device).type_as(next(self.model.parameters())))
 
         # Get model info
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
@@ -92,7 +92,7 @@ class YOLOv7Detector:
             stride=first_conv.stride,
             padding=first_conv.padding,
             bias=True if first_conv.bias is not None else False
-        ).to(self.device)
+        )
 
         # Average the weights across the RGB channels
         if first_conv.weight.shape[1] == 3:  # If it was previously RGB
@@ -136,7 +136,7 @@ class YOLOv7Detector:
         img = letterbox(image, self.img_size, stride=self.stride)
         img = img[None]  # Add channel dimension
         img = np.ascontiguousarray(img)
-        img = torch.from_numpy(img).to(self.device)
+        img = torch.from_numpy(img)
         img = img.float()
         img /= 255.0
         if img.ndimension() == 3:

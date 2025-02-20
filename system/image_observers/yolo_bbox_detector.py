@@ -53,9 +53,7 @@ class YOLOv4ImageObserver(ImageObserver):
         return "d", 5, 5, np.double
 
 
-def _release(self):
-    """Cleanup when the observer is shut down"""
-    self.log.info("Releasing YOLOv7 detector resources.")
+
 
 
 class YOLOv7ImageObserver(ImageObserver):
@@ -109,6 +107,9 @@ class YOLOv7ImageObserver(ImageObserver):
             self.log.info(
                 f"YOLOv7 detector loaded successfully (640x640 model)."
             )
+            self.nan_det = np.empty_like(self.output)
+            self.nan_det[:] = np.nan
+
         except Exception as e:
             self.log.error(f"Setup failed: {str(e)}")
             raise
@@ -129,15 +130,16 @@ class YOLOv7ImageObserver(ImageObserver):
                 img = (img / 256.0).astype("uint8")
 
             # Run detection
-            detections = self.detector.detect(img, conf_threshold=self.config["conf_thres"])
+            detections = self.detector.detect(img, conf_threshold=self.default_params["conf_thres"])
 
             if not detections:
                 self._update_output(self.nan_det)
+                self.log.info("No detections.")
                 return
 
             # Get the detection with highest confidence
             best_detection = max(detections, key=lambda x: x['confidence'])
-
+            self.log.info("detected")
             # Format output as [x1, y1, x2, y2, confidence]
             output = np.array(best_detection['bbox'] + [best_detection['confidence']], dtype=np.float64)
             self._update_output(output)
@@ -149,9 +151,7 @@ class YOLOv7ImageObserver(ImageObserver):
     def _get_buffer_opts(self):
         return "d", 5, 5, np.double
 
-def _release(self):
-    """Cleanup when the observer is shut down"""
-    self.log.info("Releasing YOLOv7 detector resources.")
+
 
 class BBoxDataCollector:
     def __init__(self, obs_id):

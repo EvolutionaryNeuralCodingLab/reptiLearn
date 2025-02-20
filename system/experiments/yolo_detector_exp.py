@@ -24,14 +24,13 @@ class YOLOTestExperiment(exp.Experiment):
         # Validate observer exists
         params = exp.get_params()
         self.log.info(f"params: {params}")
-        if params["obs_id"] not in vid.image_observers:
-            raise ValueError(f"Observer {params['obs_id']} not found")
+        # if params["obs_id"] not in vid.image_observers:
+        #     raise ValueError(f"Observer {params['obs_id']} not found")
 
         # Set detection threshold
         self.log.info(f"cuda: {torch.cuda.is_available()}")
         self.bbox_collector = BBoxDataCollector("1")
         self.print_next_detection = False
-        self.bbox_collector = self.bbox_collector
         # self.bbox_collector = vid.image_observers[params["obs_id"]]
         # if not params["detection_threshold"]:
         #     raise ValueError(f"Detection threshold must be set")
