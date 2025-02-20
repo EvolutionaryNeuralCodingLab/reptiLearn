@@ -53,6 +53,47 @@ class YOLOv4ImageObserver(ImageObserver):
         return "d", 5, 5, np.double
 
 
+import time
+from threading import Lock
+from collections import deque
+from functools import wraps
+
+
+class RateLimiter:
+    def __init__(self, max_calls=4, time_window=1.0):
+        """
+        Initialize rate limiter
+
+        Args:
+            max_calls (int): Maximum number of calls allowed in the time window
+            time_window (float): Time window in seconds
+        """
+        self.max_calls = max_calls
+        self.time_window = time_window
+        self.calls = deque()
+        self.lock = Lock()
+
+    def __call__(self, func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with self.lock:
+                # Remove old calls outside the time window
+                now = time.time()
+                while self.calls and now - self.calls[0] >= self.time_window:
+                    self.calls.popleft()
+
+                # If we've reached the limit, wait until we can make another call
+                if len(self.calls) >= self.max_calls:
+                    sleep_time = self.calls[0] + self.time_window - now
+                    if sleep_time > 0:
+                        time.sleep(sleep_time)
+                        self.calls.popleft()
+
+                # Make the call and record the timestamp
+                self.calls.append(now)
+                return func(*args, **kwargs)
+
+        return wrapper
 
 
 
@@ -122,6 +163,7 @@ class YOLOv7ImageObserver(ImageObserver):
         """Called when observation stops"""
         self.log.info("Stopping object detection.")
 
+    @RateLimiter(max_calls=1, time_window=1.0)
     def _on_image_update(self, img, timestamp):
         """Process new image and update output buffer"""
         try:
