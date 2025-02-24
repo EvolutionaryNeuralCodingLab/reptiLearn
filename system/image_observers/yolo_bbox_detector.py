@@ -122,29 +122,19 @@ class YOLOv7ImageObserver(ImageObserver):
         # try:
             # Expand paths
             # model_path = Path(self.default_params["model_path"]).expanduser()
-            # yolov7_path = Path(self.default_params["yolov7_path"]).expanduser()
+            # yolov7_path = Path("/home/tal/dev/yolov7").expanduser()
 
             # self.log.info(f"Initializing YOLOv7 detector with model: {model_path}")
         from image_observers.YOLOv7.detector import YOLOv7Detector
         # Initialize detector
         self.detector = YOLOv7Detector(
-            model_path=str(self.default_params["model_path"]),
-            yolov7_path=str(self.default_params["yolov7_path"])
+            model_path=str(self.default_params["model_path"])
         )
-
-            # Initialize empty output array for when no detections are found
-
-
-            # self.log.info("YOLOv7 detector initialized successfully")
-        #
-        # except Exception as e:
-        #     error = f"Failed to initialize YOLOv7 detector: {str(e)}"
-        #     self.log.error(error)
-        #     raise
 
     def _setup(self):
         """Called when the observer process starts"""
         try:
+            self.detector.load()
             self.log.info(
                 f"YOLOv7 detector loaded successfully (640x640 model)."
             )
@@ -163,7 +153,7 @@ class YOLOv7ImageObserver(ImageObserver):
         """Called when observation stops"""
         self.log.info("Stopping object detection.")
 
-    @RateLimiter(max_calls=1, time_window=1.0)
+    # @RateLimiter(max_calls=1, time_window=1.0)
     def _on_image_update(self, img, timestamp):
         """Process new image and update output buffer"""
         try:

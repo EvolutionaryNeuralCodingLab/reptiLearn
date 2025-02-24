@@ -2,9 +2,10 @@ import torch
 import cv2
 import numpy as np
 from typing import Tuple, List, Dict, Union
-import sys
 from pathlib import Path
-
+import os
+import sys
+import contextlib
 
 def letterbox(img: np.ndarray, new_shape=(640, 640), color=(114,), auto=True, stride=32):
     """
@@ -37,32 +38,44 @@ def letterbox(img: np.ndarray, new_shape=(640, 640), color=(114,), auto=True, st
     return img
 
 
+
+
+@contextlib.contextmanager
+def yolov7_context():
+    """Context manager to safely use yolov7 code with proper imports."""
+    # Store original state
+    original_cwd = os.getcwd()
+    original_path = sys.path.copy()
+
+    try:
+        # Add yolov7 to the path
+        yolov7_path = os.path.expanduser("~/dev/yolov7")
+        sys.path.insert(0, yolov7_path)
+
+        # Change working directory to yolov7
+        os.chdir(yolov7_path)
+
+        yield
+    finally:
+        # Restore original state
+        os.chdir(original_cwd)
+        sys.path = original_path
+
+
 class YOLOv7Detector:
-    def __init__(self, model_path: str, yolov7_path: str, device: str = 'cuda' if torch.cuda.is_available() else 'cpu'):
-        """
-        Initialize YOLOv7 detector for grayscale images
+    def __init__(self, model_path: str):
+        self.model_path = model_path
 
-        Args:
-            model_path: Path to the trained YOLOv7 weights
-            yolov7_path: Path to the YOLOv7 repository directory
-            device: Device to run inference on ('cuda' or 'cpu')
-        """
-        # Add YOLOv7 to path
-        yolov7_path = Path(yolov7_path)
-        # if not yolov7_path.exists():
-        #     raise FileNotFoundError(f"YOLOv7 path does not exist: {yolov7_path}")
-        sys.path.append(str(yolov7_path))
-
-
-        # Import YOLOv7 modules
-        from image_observers.yolov7.models.experimental import attempt_load
-        from image_observers.yolov7.utils.general import check_img_size
-        from image_observers.yolov7.utils.torch_utils import select_device
-
-        # self.device = torch.device
-
+    def load(self):
         # Load model
-        self.model = attempt_load(model_path)
+        with yolov7_context():
+            from models.experimental import attempt_load
+            from utils.general import check_img_size
+            from utils.torch_utils import select_device
+            self.model = attempt_load(self.model_path)
+
+        if not self.model:
+            raise RuntimeError('No YOLOv7 model was loaded.')
 
         # Modify first layer for grayscale input if needed
         if self.model.model[0].conv.in_channels == 3:
@@ -72,12 +85,9 @@ class YOLOv7Detector:
         self.stride = int(self.model.stride.max())
         self.img_size = check_img_size(640, s=self.stride)  # Ensure image size is multiple of stride
 
-        # if self.device.type != 'cpu':
-        #     self.model(
-        #         torch.zeros(1, 1, self.img_size, self.img_size).to(self.device).type_as(next(self.model.parameters())))
-
         # Get model info
         self.names = self.model.module.names if hasattr(self.model, 'module') else self.model.names
+
 
     def _convert_to_grayscale(self):
         """Convert the first layer of the model to accept grayscale input"""
@@ -120,7 +130,6 @@ class YOLOv7Detector:
                 - class_name: Class name from model's names list
         """
         # Import here to avoid circular imports
-        from utils.general import non_max_suppression, scale_coords
 
         # Get original image dimensions
         height, width = image.shape[:2]
@@ -145,15 +154,17 @@ class YOLOv7Detector:
         # Inference
         with torch.no_grad():
             pred = self.model(img)[0]
-
-        # Apply NMS
-        pred = non_max_suppression(pred, conf_thres=conf_threshold)
+        with yolov7_context():
+            from utils.general import non_max_suppression
+            pred = non_max_suppression(pred, conf_thres=conf_threshold)
 
         # Process detections
         detections = []
         if len(pred[0]):  # If there are detections
             # Rescale boxes from img_size to original image size
-            pred[0][:, :4] = scale_coords(img.shape[2:], pred[0][:, :4], image.shape).round()
+            with yolov7_context():
+                from utils.general import scale_coords
+                pred[0][:, :4] = scale_coords(img.shape[2:], pred[0][:, :4], image.shape).round()
 
             # Convert to normalized coordinates and create detection objects
             for *xyxy, conf, cls in pred[0]:

@@ -1,4 +1,7 @@
+import arena
+
 import experiment as exp
+from experiment import session_state
 import video_system as vid
 import numpy as np
 
@@ -20,26 +23,34 @@ class YOLOTestExperiment(exp.Experiment):
 
     def setup(self):
         """Initialize the experiment"""
-        self.log.info("Setting up experiment")
+        self.log.info("Setting up detection experiment")
         # Validate observer exists
         params = exp.get_params()
         self.log.info(f"params: {params}")
-        # if params["obs_id"] not in vid.image_observers:
-        #     raise ValueError(f"Observer {params['obs_id']} not found")
 
-        # Set detection threshold
-        self.log.info(f"cuda: {torch.cuda.is_available()}")
         self.bbox_collector = BBoxDataCollector("1")
         self.print_next_detection = False
-        # self.bbox_collector = vid.image_observers[params["obs_id"]]
-        # if not params["detection_threshold"]:
-        #     raise ValueError(f"Detection threshold must be set")
-        # self.bbox_collector.config["conf_thres"] = params["detection_threshold"]
-        # self.log.info(f"Detection threshold: {self.bbox_collector.config['conf_thres']}")
 
         # Initialize detection counter
         self.detection_count = 0
         self.last_timestamp = None
+
+        self.actions["Test Response"] = {"run": self.respond}
+        self.actions["FEED"] = {"run": self.feed}
+        session_state["feeder_count"] = 15
+
+    def respond(self):
+        arena.run_command("toggle", "SSR")
+        self.log.info("Testing Response")
+        session_state["pin"] = [True if not session_state["pin"] else False][0]
+
+    def feed(self):
+        if not session_state["feeder_count"] == 0:
+            arena.run_command("dispense", "Feeder", None, False)
+            self.log.info("fed")
+            session_state["feeder_count"] = session_state["feeder_count"] - 1
+        else:
+            self.log.info("No more food")
 
     def run(self):
         """Start the detection test"""
@@ -47,8 +58,8 @@ class YOLOTestExperiment(exp.Experiment):
 
         # Start the observer
         self.bbox_collector.start(self.on_detection)
-        # self.bbox_collector.start_observing()
-
+        # arena.run_command("set_value", "ssr1", [1])
+        # session_state["pin"] = True
         self.log.info(f"Starting YOLO test with confidence threshold {params['detection_threshold']}")
 
     def end(self):
@@ -91,6 +102,9 @@ class YOLOTestExperiment(exp.Experiment):
                     f"Processed {self.detection_count} frames\n"
                     f"Latest detection - Confidence: {confidence:.3f}, Location: {bbox_coords}"
                 )
+            self.respond()
+            self.log.info("responding on detection")
+
 
     def run_trial(self):
         """Start a new trial"""

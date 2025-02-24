@@ -85,12 +85,19 @@ video_record = {
             "ffmpeg_log_level": "warning",
         },
         "gpu": {
-            "codec": "h264_nvenc",
-            "quality": None,
-            "macro_block_size": 1,
-            "pixelformat": "bgr0",
+            "codec": "libx264",
+            "macro_block_size": 2,
+            "pixelformat": "nv12",
             "ffmpeg_log_level": "warning",
-            "output_params": ["-preset", "slow", "-qp", "30"], # -rc constqp removed, but you can control the rate using the -qp (constant quantization parameter) or -b:v options
+            "output_params": [
+                # "-init_hw_device", "cuda=nv:0",  # Initialize CUDA devic
+                # "-filter_hw_device", "nv",  # Set hardware device for filters
+                # "-hwaccel", "cuda",  # Enable CUDA hardware acceleration
+                # "-hwaccel_device", "0",  # Use first GPU
+                "-preset", "slow",
+                "-vf", "format=nv12",  # Upload to GPU memory
+
+            ]
         },
         "color": {
             "codec": "h264_nvenc",
@@ -133,10 +140,10 @@ arena = {
 
 # Database connection
 database = {
-    "user": "postgres",
+    "user": "tal",
     "host": "127.0.0.1",
     "port": 5432,
-    "db": "reptilearn",
+    "db": "reptilearn_test",
 }
 
 # Event data logger
