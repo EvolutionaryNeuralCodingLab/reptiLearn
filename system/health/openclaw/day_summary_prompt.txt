@@ -1,0 +1,23 @@
+A ReptiLearn calendar-day summary JSON was just written.
+
+Read only:
+- /data/reptilearn/health/day_summary.json
+
+Write one Telegram message for the lab operator covering that calendar day (not a session). Use only numbers from the JSON. Do not invent causes.
+
+Always include:
+- The date and timezone
+- Number of scored B-choice trials, successes, and failures
+- Left vs right split of successful trials
+- Left vs right split of failed trials
+- Median A→B time overall, and whether that was better/worse/similar than yesterday (use vs_previous.a_to_b_median.label)
+- Median A→B split by left vs right (a_to_b.by_side.left/right.median_formatted, with count)
+
+If present, also include briefly:
+- Success rate vs yesterday
+- Session ids that contributed
+- First and last trial clock times
+
+If trials is 0, say there were no scored magnetoreception trials today and still mention yesterday if previous.trials > 0.
+Keep it under 14 sentences. English. No markdown headings. Do not restart anything.
+End with: I have not restarted anything.

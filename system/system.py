@@ -27,6 +27,7 @@ import experiment
 import task
 import video_system
 import routes
+import voice
 from json_convert import json_convert
 import version
 
@@ -104,6 +105,7 @@ shutdown_main_event = threading.Event()
 def shutdown():
     log.info("Shutting down...")
 
+    voice.shutdown()
     video_system.shutdown()
     schedule.cancel_all(pool=None, wait=True)
     arena.shutdown()
@@ -121,6 +123,7 @@ task.init()
 arena.init(state)
 video_system.init(state)
 experiment.init(state, on_loop_shutdown=shutdown)
+voice.init(state, socketio)
 
 # Setup flask http routes
 routes.add_routes(app)
@@ -150,7 +153,10 @@ host, port = config.web_ui["host"], config.web_ui["port"]
 log.info(f"Running web server on {host}:{port}")
 
 flask_thread = threading.Thread(
-    target=socketio.run, args=(app,), kwargs={"host": host, "port": port}, daemon=True
+    target=socketio.run,
+    args=(app,),
+    kwargs={"host": host, "port": port, "allow_unsafe_werkzeug": True},
+    daemon=True,
 )
 flask_thread.start()
 

@@ -9,6 +9,7 @@ Manage video recording and image capture.
 from threading import Timer
 from pathlib import Path
 import json
+import traceback
 
 from configure import get_config
 from dynamic_loading import instantiate_class, load_modules, find_subclasses, reload_module
@@ -17,6 +18,8 @@ import video_write
 from arena import has_trigger, start_trigger, stop_trigger
 from video_stream import ImageSource, ImageObserver
 import overlays.timestamp
+import overlays.bbox
+import overlays.magnetic_field
 import overlay
 import managed_state
 
@@ -31,6 +34,10 @@ image_observers = {}
 
 # A dictionary containing loaded VideoWriters using source ids as keys.
 video_writers = {}
+
+# Bumped each time observer processes are (re)started. Experiments store the
+# generation they attached to; a mismatch means bbox listeners were orphaned.
+_observers_generation = 0
 
 # A list of strings containing every known ImageSource class
 source_classes = {}
@@ -61,6 +68,46 @@ def _load_source(id, config):
     )
 
     overlay.overlays[id] = [overlays.timestamp.TimestampVisualizer({})]
+    _add_magnetic_field_overlay(id)
+
+
+def _add_magnetic_field_overlay(src_id):
+    arena = get_config().arena
+    overlay_conf = arena.get("magnetic_sensor_overlay") or arena.get(
+        "magnetic_field_overlay"
+    )
+    if not overlay_conf or not overlay_conf.get("enabled", True):
+        return
+
+    sources = overlay_conf.get("image_sources")
+    if sources is not None and src_id not in sources:
+        return
+
+    if src_id not in overlay.overlays:
+        return
+
+    overlay_params = {
+        "interface": overlay_conf.get("interface", "Magnetic Sensor"),
+        "arena_state": _state.get_cursor("arena"),
+        "position": overlay_conf.get("position", "bottom"),
+    }
+    for key in (
+        "color",
+        "font_scale",
+        "margin",
+        "line_spacing",
+        "timestamp_clearance",
+    ):
+        if key in overlay_conf:
+            overlay_params[key] = overlay_conf[key]
+
+    overlay.overlays[src_id].append(
+        overlays.magnetic_field.MagneticFieldOverlay(overlay_params)
+    )
+    _log.info(
+        f"MagneticFieldOverlay registered on '{src_id}' "
+        f"(interface={overlay_params['interface']!r}, position={overlay_params['position']!r})"
+    )
 
 
 def _load_observer(id, config):
@@ -76,6 +123,12 @@ def _load_observer(id, config):
         get_config().state_store_address,
         get_config().state_store_authkey,
     )
+
+    src_id = config["src_id"]
+    if src_id in overlay.overlays:
+        overlay.overlays[src_id].append(
+            overlays.bbox.BBoxOverlay({"obs_id": id})
+        )
 
 
 def _load_video_writers():
@@ -192,6 +245,13 @@ def update_video_config(config: dict, save=True):
     - config: Video configuration dict.
     """
     global image_sources, image_observers, video_config
+
+    # This log is intentionally verbose to diagnose unexpected restart loops.
+    _log.warning(
+        "update_video_config called "
+        f"(save={save}, sources_before={len(image_sources)}, observers_before={len(image_observers)})\n"
+        f"Caller stack:\n{''.join(traceback.format_stack(limit=8))}"
+    )
 
     if save:
         _log.info(f"Saving video config to '{get_config().video_config_path.resolve()}'...")
@@ -423,10 +483,16 @@ def init(state: managed_state.Cursor):
         stop_trigger()
 
 
+def observers_generation() -> int:
+    """Monotonic counter of observer process (re)starts."""
+    return _observers_generation
+
+
 def start_processes():
     """
     Start processes of image writers, observers and sources.
     """
+    global _observers_generation
     for w in video_writers.values():
         w.start()
 
@@ -443,12 +509,72 @@ def start_processes():
         _update_acquire_callback(src_id)
         img_src.start()
 
+    # Enable live observer inference so overlays can consume fresh outputs.
+    for obs_id, img_obs in image_observers.items():
+        try:
+            img_obs.start_observing()
+            _log.info(f"Started observing for image observer '{obs_id}'")
+        except Exception:
+            _log.exception(f"Failed to start observing for image observer '{obs_id}':")
+
+    _observers_generation += 1
+    try:
+        _state["video", "observers_generation"] = _observers_generation
+    except Exception:
+        _log.exception("Failed to publish video.observers_generation:")
+    _reattach_experiment_after_video_restart()
+
+
+def _reattach_experiment_after_video_restart():
+    """Re-hook experiment bbox/zone listeners onto the new observer instances."""
+    try:
+        running = bool(_state.root().get(("session", "is_running"), False))
+    except Exception:
+        running = False
+    if not running:
+        return
+
+    _log.warning(
+        "Video observers restarted while an experiment is running "
+        f"(observers_generation={_observers_generation}). "
+        "Re-attaching experiment bbox listeners."
+    )
+    try:
+        import experiment as exp_mod
+
+        cur = exp_mod.cur_experiment
+        if cur is None:
+            _log.error(
+                "Session is running but cur_experiment is None; "
+                "bbox listeners were not re-attached."
+            )
+            return
+        hook = getattr(cur, "on_video_restart", None)
+        if not callable(hook):
+            return
+        hook()
+    except Exception:
+        _log.exception(
+            "Failed to re-attach experiment listeners after video restart:"
+        )
+
+
+def _join_or_terminate(proc, timeout=10, label="process"):
+    proc.join(timeout=timeout)
+    if proc.is_alive():
+        _log.warning(f"{label} did not exit within {timeout}s, terminating")
+        proc.terminate()
+        proc.join(timeout=5)
+
 
 def shutdown_video():
     """
     Shutdown all ImageSource and ImageObserver processes. Blocks until
     all processes terminate.
     """
+    # Drop overlays first so any live HTTP stream won't look up torn-down observers.
+    overlay.overlays.clear()
+
     for w in video_writers.values():
         try:
             w.stop_observing()
@@ -464,10 +590,10 @@ def shutdown_video():
             _log.exception("Error while closing image observers:")
 
     for w in video_writers.values():
-        w.join()
+        _join_or_terminate(w, label=f"VideoWriter:{w.id}")
 
     for obs in image_observers.values():
-        obs.join()
+        _join_or_terminate(obs, label=f"ImageObserver:{obs.id}")
 
     if has_trigger():
         start_trigger(update_state=False)
@@ -482,7 +608,7 @@ def shutdown_video():
         _state.remove_callback(("video", "image_sources", src_id, "acquiring"))
 
     for img_src in image_sources.values():
-        img_src.join()
+        _join_or_terminate(img_src, label=f"ImageSource:{img_src.id}")
 
     if "video" in _state:
         _state.delete("video")
@@ -498,6 +624,10 @@ def restart_video():
     """
     Restart the video system.
     """
+    _log.warning(
+        "restart_video called\n"
+        f"Caller stack:\n{''.join(traceback.format_stack(limit=8))}"
+    )
     update_video_config(video_config, save=False)
 
 

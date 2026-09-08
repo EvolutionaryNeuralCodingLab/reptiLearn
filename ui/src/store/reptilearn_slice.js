@@ -9,6 +9,8 @@ export const reptilearnSlice = createSlice({
         streams: [],
         log: [],
         logBufferLength: 1000, // maximum number of lines in the log buffer
+        analysisFigures: [],
+        analysisSelectedSessionIds: [],
     },
     reducers: {
         setCtrlState: (state, action) => {
@@ -47,6 +49,7 @@ export const reptilearnSlice = createSlice({
                 src_id: src_id,
                 width: new_width,
                 undistort: false,
+                show_zones: false,
                 is_streaming: new_is_streaming,
             };
             const new_streams = [...state.streams, new_stream];
@@ -100,6 +103,44 @@ export const reptilearnSlice = createSlice({
         setArenaConfig: (state, action) => {
             state.arenaConfig = action.payload;
         },
+        cacheAnalysisFigure: (state, action) => {
+            const figure = action.payload;
+            const cacheKey = figure.cacheKey;
+            state.analysisFigures.forEach((item) => {
+                item.isVisible = false;
+            });
+            state.analysisFigures = state.analysisFigures.filter(
+                (item) => item.cacheKey !== cacheKey
+            );
+            state.analysisFigures.push(figure);
+        },
+        setAnalysisSelectedSessions: (state, action) => {
+            state.analysisSelectedSessionIds = action.payload;
+        },
+        setAnalysisFigureVisible: (state, action) => {
+            const { id, isVisible } = action.payload;
+            if (isVisible) {
+                state.analysisFigures.forEach((item) => {
+                    item.isVisible = item.id === id;
+                });
+            } else {
+                const figure = state.analysisFigures.find((item) => item.id === id);
+                if (figure) {
+                    figure.isVisible = false;
+                }
+            }
+        },
+        removeAnalysisFigure: (state, action) => {
+            state.analysisFigures = state.analysisFigures.filter(
+                (item) => item.id !== action.payload
+            );
+        },
+        pruneStaleAnalysisFigures: (state, action) => {
+            const prefix = `v${action.payload}:`;
+            state.analysisFigures = state.analysisFigures.filter(
+                (item) => item.cacheKey?.startsWith(prefix)
+            );
+        },
     },
 });
 
@@ -115,6 +156,6 @@ export const streamlessSrcIds = (state) => {
     return imageSourceIds(state)?.filter(src_id => !used_ids.includes(src_id));
 };
 
-export const { setCtrlState, setLog, appendLog, setLogBufferLength, setVideoConfig, setStreams, addStream, updateStreamSources, moveStream, removeStream, updateStream, stopStreaming, startStreaming, setArenaConfig } = reptilearnSlice.actions;
+export const { setCtrlState, setLog, appendLog, setLogBufferLength, setVideoConfig, setStreams, addStream, updateStreamSources, moveStream, removeStream, updateStream, stopStreaming, startStreaming, setArenaConfig, cacheAnalysisFigure, setAnalysisFigureVisible, removeAnalysisFigure, setAnalysisSelectedSessions, pruneStaleAnalysisFigures } = reptilearnSlice.actions;
 
 export default reptilearnSlice.reducer;

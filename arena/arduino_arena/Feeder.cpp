@@ -55,14 +55,14 @@ void Feeder::loop() {
     else {
       state = prepare;
       stepper.setCurrentPosition(0);
-      stepper.setSpeed(STEPPER_SPEED);      
-    } 
+      stepper.setSpeed(STEPPER_SPEED);
+    }
   }
 }
 
 void Feeder::feed() {
   if (state == standby) {
-    state = forward;     
+    state = forward;
     stepper.setSpeed(STEPPER_SPEED);
   }
 }

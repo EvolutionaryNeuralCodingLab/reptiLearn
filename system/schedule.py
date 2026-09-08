@@ -5,6 +5,7 @@ Author: Tal Eisenberg, 2021
 """
 
 from datetime import datetime, time, timedelta
+from time import sleep as _sleep
 import threading
 import logging
 import functools
@@ -78,9 +79,15 @@ def cancel_all(pool="experiment", wait=True):
     """
 
     if pool is None:
+        # Cancel every pool before waiting. Waiting inside each recursive call
+        # would block on pools that were not cancelled yet (deadlock).
         pools = list(_cancel_fns.keys())
         for p in pools:
-            cancel_all(p)
+            cancel_all(p, wait=False)
+
+        if wait is True:
+            while _cancel_fns != {}:
+                _sleep(0.01)
         return
 
     if pool not in _cancel_fns:
@@ -91,8 +98,8 @@ def cancel_all(pool="experiment", wait=True):
         f()
 
     if wait is True:
-        while _cancel_fns != {}:
-            pass
+        while pool in _cancel_fns:
+            _sleep(0.01)
 
 
 def is_scheduled(cancel_fn, pool="experiment"):

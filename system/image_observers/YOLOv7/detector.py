@@ -41,19 +41,22 @@ def letterbox(img: np.ndarray, new_shape=(640, 640), color=(114,), auto=True, st
 
 
 @contextlib.contextmanager
-def yolov7_context():
-    """Context manager to safely use yolov7 code with proper imports."""
+def yolo_repo_context(repo_path: str):
+    """Context manager to safely import YOLO code from a configured repo path."""
     # Store original state
     original_cwd = os.getcwd()
     original_path = sys.path.copy()
 
     try:
-        # Add yolov7 to the path
-        yolov7_path = os.path.expanduser("~/dev/yolov7")
-        sys.path.insert(0, yolov7_path)
+        expanded_repo_path = os.path.expanduser(repo_path)
+        if not os.path.isdir(expanded_repo_path):
+            raise FileNotFoundError(f"YOLO repo path does not exist: {expanded_repo_path}")
 
-        # Change working directory to yolov7
-        os.chdir(yolov7_path)
+        # Add configured YOLO repo to sys.path
+        sys.path.insert(0, expanded_repo_path)
+
+        # Change working directory to repo root
+        os.chdir(expanded_repo_path)
 
         yield
     finally:
@@ -63,12 +66,13 @@ def yolov7_context():
 
 
 class YOLOv7Detector:
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, yolo_repo_path: str):
         self.model_path = model_path
+        self.yolo_repo_path = yolo_repo_path
 
     def load(self):
         # Load model
-        with yolov7_context():
+        with yolo_repo_context(self.yolo_repo_path):
             from models.experimental import attempt_load
             from utils.general import check_img_size
             from utils.torch_utils import select_device
@@ -154,7 +158,7 @@ class YOLOv7Detector:
         # Inference
         with torch.no_grad():
             pred = self.model(img)[0]
-        with yolov7_context():
+        with yolo_repo_context(self.yolo_repo_path):
             from utils.general import non_max_suppression
             pred = non_max_suppression(pred, conf_thres=conf_threshold)
 
@@ -162,7 +166,7 @@ class YOLOv7Detector:
         detections = []
         if len(pred[0]):  # If there are detections
             # Rescale boxes from img_size to original image size
-            with yolov7_context():
+            with yolo_repo_context(self.yolo_repo_path):
                 from utils.general import scale_coords
                 pred[0][:, :4] = scale_coords(img.shape[2:], pred[0][:, :4], image.shape).round()
 

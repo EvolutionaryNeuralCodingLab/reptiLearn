@@ -30,6 +30,8 @@ _interfaces_config: list = None
 _trigger_interface: str = None
 _arena_process = None
 _arena_process_thread = None
+_door_schedule_tick = 0
+_door_schedule_cancel = None
 
 
 def switch_display(on, display=None):
@@ -223,18 +225,22 @@ def _on_all_values(_, values):
         _values_once_callback(values)
         _values_once_callback = None
 
-    data_log_config = get_config().arena.get("data_log", None)
-    if data_log_config is not None:
-        flat_values = _flatten(values)
-        log_values = [timestamp]
-        log_conf = data_log_config
-        for col in log_conf["columns"]:
-            if col[0] in flat_values:
-                log_values.append(flat_values[col[0]])
-            else:
-                log_values.append(None)
+    _log_arena_values(timestamp, values)
 
-        _arena_log.log(log_values)
+
+def _log_arena_values(timestamp, values):
+    data_log_config = get_config().arena.get("data_log", None)
+    if data_log_config is None or _arena_log is None:
+        return
+
+    flat_values = _flatten(values)
+    log_values = [timestamp]
+    for col in data_log_config["columns"]:
+        if col[0] in flat_values:
+            log_values.append(flat_values[col[0]])
+        else:
+            log_values.append(None)
+    _arena_log.log(log_values)
 
 
 def _on_value(_, msg):
@@ -243,6 +249,8 @@ def _on_value(_, msg):
 
     timestamp = time.time()
     _arena_state["timestamp"] = timestamp
+
+    _log_arena_values(timestamp, {interface: value})
 
 
 def _on_info(topic, msg):
@@ -487,11 +495,48 @@ def init(state):
 
     schedule.repeat(poll, get_config().arena["poll_interval"], pool="arena")
 
+    door_sched = get_config().arena.get("door_schedule", {})
+    if door_sched.get("enabled", False):
+        global _door_schedule_cancel
+        spacing = door_sched.get("right_left_spacing_sec", 5)
+        _door_schedule_cancel = schedule.repeat(
+            _door_schedule_tick_fn,
+            spacing,
+            pool="arena",
+        )
+        _log.info(
+            f"Door schedule started: Back+Right and Left doors alternating every {spacing}s"
+        )
+
+
+def _door_schedule_tick_fn():
+    """Run every N seconds: even ticks = Back+Right, odd ticks = Left."""
+    global _door_schedule_tick
+    door_sched = get_config().arena.get("door_schedule", {})
+    if not door_sched.get("enabled", False):
+        return
+    back_doors = door_sched.get("back_door_interfaces", [])
+    right_door = door_sched.get("right_door_interface")
+    left_door = door_sched.get("left_door_interface")
+    if _door_schedule_tick % 2 == 0:
+        for iface in back_doors:
+            run_command("open", iface, update_value=False)
+        if right_door:
+            run_command("open", right_door, update_value=False)
+    else:
+        if left_door:
+            run_command("open", left_door, update_value=False)
+    _door_schedule_tick += 1
+
 
 def shutdown():
     """
     Shutdown the arena module.
     """
+    global _door_schedule_cancel
+    if _door_schedule_cancel is not None:
+        _door_schedule_cancel()
+        _door_schedule_cancel = None
     topic = get_config().arena["receive_topic"]
     mqtt.client.unsubscribe_callback(f"{topic}/all_values")
     mqtt.client.unsubscribe_callback(f"{topic}/info/#")

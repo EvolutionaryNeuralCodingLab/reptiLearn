@@ -61,7 +61,7 @@ For programming Arduino boards you need to install [arduino-cli](https://arduino
 Once installed, run these commands to install the necessary Arduino libraries:
 ```
 arduino-cli core update-index
-arduino-cli lib install AccelStepper ArduinoJson OneWire DallasTemperature
+arduino-cli lib install AccelStepper ArduinoJson OneWire DallasTemperature "SparkFun TMAG5273 Arduino Library"
 ```
 
 Finally, install the software for your specific Arduino board model(s). For example for an Arduino Nano Every or UNO WiFi Rev 2 run:
@@ -166,6 +166,10 @@ For example, ```python main.py --config config2``` will start the system configu
 - Open a recent version of your favorite web browser, and go to [`http://localhost:3500`](http://localhost:3500). You can access the web app remotely by using an ssh tunnel or by using the computer's IP address instead of `localhost`.
 
 NOTE: We recommend using ssh tunnels and/or a VPN to securely access the web app. ReptiLearn has no support for user authentication or any other security measures.
+
+### Android app
+
+You can also wrap the web UI as an Android app (Capacitor) for phone use. See [Mobile app](mobile.md) for build steps, server URL configuration, and the phone layout.
 
 ## Database
 

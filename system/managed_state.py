@@ -100,7 +100,11 @@ class Cursor:
             self.path = path
 
         if self._mgr is None:
-            _StateManager.register("get")
+            # StateStore._start_manager registers ("get", <callable>, DictProxy). Calling
+            # register("get") again overwrites entry with callable=None; then mgr.get() hits
+            # ValueError: Without callable, must have one non-keyword argument (same process).
+            if "get" not in getattr(_StateManager, "_registry", {}):
+                _StateManager.register("get")
             self._mgr = _StateManager(
                 address=self._address, authkey=self._authkey.encode("ASCII")
             )

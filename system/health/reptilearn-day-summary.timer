@@ -1,0 +1,18 @@
+# Install as a user timer (19:55 local, before the 20:00 OpenClaw Telegram job):
+#   cp /home/tal/dev/reptiLearn/system/health/reptilearn-day-summary.{service,timer} ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now reptilearn-day-summary.timer
+#
+# One-shot: python -m health.day_summary
+# Output:   /data/reptilearn/health/day_summary.json
+
+[Unit]
+Description=Write ReptiLearn day summary JSON at 19:55
+
+[Timer]
+OnCalendar=*-*-* 19:55:00
+Persistent=true
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

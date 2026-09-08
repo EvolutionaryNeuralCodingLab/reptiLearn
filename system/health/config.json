@@ -1,0 +1,42 @@
+{
+  "health_dir": "/data/reptilearn/health",
+  "heartbeat_interval_sec": 30,
+  "heartbeat_stale_sec": 180,
+  "files_stale_sec": 180,
+  "disk_warn_pct": 85,
+  "disk_fail_pct": 95,
+  "require_session_for_heartbeat_and_files": true,
+  "bbox_listener_stale_sec": 90,
+  "bbox_experiments": [
+    "magnetoreception_train",
+    "magnetoreception_exp",
+    "onboarding"
+  ],
+  "day_summary_timezone": "Asia/Jerusalem",
+  "web_ui": {
+    "host": "127.0.0.1",
+    "port": 3500,
+    "timeout_sec": 3
+  },
+  "paths": {
+    "session_data_root": "/data/reptilearn/sessions",
+    "media_dir": "/data/reptilearn/media",
+    "arena_config": "config/arena_config.json"
+  },
+  "processes": {
+    "main": {
+      "needles": ["main.py"],
+      "required": true
+    },
+    "arena": {
+      "needles": ["arena.py"],
+      "required": true
+    },
+    "mosquitto": {
+      "needles": ["mosquitto"],
+      "required": false
+    }
+  },
+  "skip_serial_numbers": ["0"],
+  "expected_boards": ["magnets", "feeders", "doors", "magnetometer"]
+}

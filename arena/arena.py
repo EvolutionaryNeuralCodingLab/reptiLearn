@@ -11,7 +11,6 @@ import logging
 import sys
 import subprocess
 import argparse
-import platform
 import traceback
 from serial.tools import list_ports
 from serial_mqtt import SerialMQTTBridge, serial_port_by_id
@@ -60,15 +59,8 @@ def upload_program(log, serial_ports_config, port_name=None):
             return False
 
         try:
-            file_flag = "-f" if platform.system() == "Darwin" else "-F"
-
             port = serial_port_by_id(pid)
             log.info(f"Uploading arena program to port '{port_name}' ({port}).")
-
-            if platform.system() != "Windows":
-                ret = run_shell_command(log, ["stty", file_flag, port.device, "1200"])
-                if ret != 0:
-                    return False
 
             ret = run_shell_command(
                 log,

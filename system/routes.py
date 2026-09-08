@@ -5,10 +5,14 @@ Author: Tal Eisenberg, 2021, 2022
 """
 import flask
 import json
+import traceback
+import numpy as np
+
 from configure import get_config
 from json_convert import json_convert
 
 import overlay
+import overlays.zones as zones
 import task
 import arena
 import experiment
@@ -66,6 +70,9 @@ def add_routes(app):
         else:
             src_config = None
 
+        undistort_mapping = None
+        undistort_roi = None
+
         if (
             flask.request.args.get("undistort") == "true"
             and src_config is not None
@@ -73,17 +80,29 @@ def add_routes(app):
         ):
             o_height, o_width = src_config["image_shape"][:2]
             undistort_config = get_config().undistort[src_config["undistort"]]
-            undistort_mapping, _, _ = undistort.get_undistort_mapping(
+            undistort_mapping, undistort_roi, _ = undistort.get_undistort_mapping(
                 o_width, o_height, undistort_config
             )
-        else:
-            undistort_mapping = None
 
-        return (width, height, undistort_mapping)
+        return (width, height, undistort_mapping, undistort_roi)
 
-    def encode_image_for_response(img, width, height, undistort_mapping):
+    _HTTP_STREAMING_MIME = {
+        "JPEG": "image/jpeg",
+        "WebP": "image/webp",
+        "PNG": "image/png",
+    }
+
+    def http_streaming_mimetype():
+        encoding = get_config().http_streaming.get("encoding", "JPEG")
+        return _HTTP_STREAMING_MIME.get(encoding, "image/jpeg")
+
+    def encode_image_for_response(
+        img, width, height, undistort_mapping, undistort_roi=None
+    ):
         if undistort_mapping is not None:
-            img = undistort.undistort_image(img, undistort_mapping)
+            img = undistort.undistort_image(
+                img, undistort_mapping, roi=undistort_roi
+            )
 
         return image_utils.encode_image(
             img,
@@ -96,7 +115,40 @@ def add_routes(app):
     def route_image_sources_get_image(src_id):
         img, _ = video_system.image_sources[src_id].get_image(scale_to_8bit=True)
         enc_img = encode_image_for_response(img, *parse_image_request(src_id))
-        return flask.Response(enc_img, mimetype="image/jpeg")
+        return flask.Response(enc_img, mimetype=http_streaming_mimetype())
+
+    @app.route("/image_sources/<src_id>/snapshot_model_input.jpg")
+    def route_snapshot_model_input_jpeg(src_id):
+        """
+        Grayscale JPEG of the latest buffer contents after the same uint16 handling as
+        YOLOv7ImageObserver (divide by 256 to uint8). Coordinate system matches CSV boxes.
+        """
+        if src_id not in video_system.image_sources:
+            return flask.Response("Unknown image source id", status=400)
+        try:
+            img, _ts = video_system.image_sources[src_id].get_image(scale_to_8bit=False)
+            if img.dtype == np.uint16:
+                img = (img.astype(np.float32) / 256.0).astype(np.uint8)
+            cfg = get_config().http_streaming
+            params = cfg.get("encode_params", {}).copy()
+            if cfg.get("encoding", "JPEG") == "JPEG" and "quality" not in params:
+                params["quality"] = 92
+            wq = flask.request.args.get("width")
+            hq = flask.request.args.get("height")
+            shape = (
+                int(wq) if wq is not None else None,
+                int(hq) if hq is not None else None,
+            )
+            enc_img = image_utils.encode_image(
+                img,
+                encoding="JPEG",
+                encode_params=params,
+                shape=shape,
+            )
+            return flask.Response(enc_img, mimetype="image/jpeg")
+        except Exception:
+            log.exception(f"snapshot_model_input failed for src_id={src_id!r}")
+            return flask.Response("snapshot encode failed — see server log", status=500)
 
     @app.route("/image_sources/<src_id>/stream")
     def route_image_sources_stream(src_id):
@@ -112,6 +164,7 @@ def add_routes(app):
         )
 
         enc_args = parse_image_request(src_id)
+        show_zones = flask.request.args.get("show_zones") == "true"
 
         def flask_gen():
             log.debug(f"Starting new stream over http: {src_id}")
@@ -122,13 +175,14 @@ def add_routes(app):
                     try:
                         img, timestamp = next(gen)
                         img = overlay.apply_overlays(img, timestamp, src_id)
+                        if show_zones:
+                            img = zones.apply_zone_overlay(img, src_id)
                         enc_img = encode_image_for_response(img, *enc_args)
-                        yield (
-                            b"Content-Type: image\r\n\r\n"
-                            + bytearray(enc_img)
-                            + b"--frame\r\n"
-                            # + b"\r\n\r\n"
+                        part_header = (
+                            b"--frame\r\n"
+                            + f"Content-Type: {http_streaming_mimetype()}\r\n\r\n".encode()
                         )
+                        yield part_header + bytearray(enc_img) + b"\r\n"
                     except StopIteration:
                         break
             finally:
@@ -351,13 +405,49 @@ def add_routes(app):
     def route_video_update_config():
         try:
             new_config = flask.request.json
+            requester = flask.request.remote_addr
+            user_agent = flask.request.headers.get("User-Agent", "unknown")
+            req_origin = flask.request.headers.get("Origin", "unknown")
+            # Keep stack short but actionable for identifying repeated restart triggers.
+            stack_preview = "".join(traceback.format_stack(limit=6))
+            log.warning(
+                "Video restart requested via /video/update_config "
+                f"(has_payload={new_config is not None}, remote={requester}, "
+                f"origin={req_origin}, user_agent={user_agent})\n"
+                f"Stack preview:\n{stack_preview}"
+            )
             if new_config is None:
-                video_system.restart_video()
-            else:
-                video_system.update_video_config(flask.request.json)
+                log.warning(
+                    "Rejected /video/update_config call with empty payload. "
+                    "Use /video/restart for explicit restarts."
+                )
+                return flask.Response(
+                    "Missing payload. Use /video/restart for restart.",
+                    status=400,
+                )
+
+            video_system.update_video_config(flask.request.json)
             return flask.Response("ok")
         except Exception as e:
             log.exception("Exception while updating video config:")
+            flask.abort(500, e)
+
+    @app.route("/video/restart", methods=["POST"])
+    def route_video_restart():
+        try:
+            requester = flask.request.remote_addr
+            user_agent = flask.request.headers.get("User-Agent", "unknown")
+            req_origin = flask.request.headers.get("Origin", "unknown")
+            stack_preview = "".join(traceback.format_stack(limit=6))
+            log.warning(
+                "Video restart requested via /video/restart "
+                f"(remote={requester}, origin={req_origin}, user_agent={user_agent})\n"
+                f"Stack preview:\n{stack_preview}"
+            )
+            video_system.restart_video()
+            return flask.Response("ok")
+        except Exception as e:
+            log.exception("Exception while restarting video config:")
             flask.abort(500, e)
 
     @app.route("/video/get_config")
@@ -564,3 +654,76 @@ def add_routes(app):
             return flask.send_from_directory(app.static_folder, path)
         else:
             return flask.send_from_directory(app.static_folder, "index.html")
+
+    # Analytics Routes
+    @app.route("/analysis/magnetoreception", methods=["POST"])
+    def analysis_magnetoreception():
+        import base64
+        import magnetoreception_analysis
+
+        try:
+            body = flask.request.json or {}
+            panel = body.get("panel", "all")
+            scope = body.get("scope", "current")
+            session_ids = body.get("session_ids", [])
+            bulk_name = body.get("bulk_name", "analysis")
+
+            png_bytes, stats = magnetoreception_analysis.run_magnetoreception_analysis(
+                panel=panel,
+                scope=scope,
+                session_ids=session_ids,
+                bulk_name=bulk_name,
+            )
+            return flask.Response(
+                json.dumps(
+                    {
+                        "image": base64.b64encode(png_bytes).decode("ascii"),
+                        "stats": stats,
+                    },
+                    default=json_convert,
+                ),
+                mimetype="application/json",
+            )
+        except ValueError as exc:
+            return flask.Response(
+                json.dumps({"error": str(exc)}),
+                mimetype="application/json",
+                status=400,
+            )
+        except Exception:
+            log.exception("Exception while running magnetoreception analysis:")
+            return flask.Response(
+                json.dumps({"error": "Analysis failed. See server log for details."}),
+                mimetype="application/json",
+                status=500,
+            )
+
+    @app.route("/analysis/export_figures", methods=["POST"])
+    def analysis_export_figures():
+        import magnetoreception_analysis
+
+        try:
+            body = flask.request.json or {}
+            output_dir = body.get("output_dir", "")
+            figures = body.get("figures", [])
+            result = magnetoreception_analysis.export_analysis_figures(
+                output_dir,
+                figures,
+            )
+            return flask.Response(
+                json.dumps(result, default=json_convert),
+                mimetype="application/json",
+            )
+        except ValueError as exc:
+            return flask.Response(
+                json.dumps({"error": str(exc)}),
+                mimetype="application/json",
+                status=400,
+            )
+        except Exception:
+            log.exception("Exception while exporting analysis figures:")
+            return flask.Response(
+                json.dumps({"error": "Export failed. See server log for details."}),
+                mimetype="application/json",
+                status=500,
+            )

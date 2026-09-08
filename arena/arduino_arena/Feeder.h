@@ -23,7 +23,7 @@ enum State {
 class Feeder {
  public:
   State state;
-  AccelStepper stepper;  
+  AccelStepper stepper;
   Feeder(int motor1, int motor2, int motor3, int motor4);
   void init();
   void feed();

@@ -11,6 +11,11 @@ import { SessionMenuView } from './session_menu_view.js';
 import { TasksView } from './tasks_view.js';
 import { AddStreamButton } from './add_stream_button.js';
 import { MainMenu } from './main_menu.js';
+import { AnalysisMenuView } from './analysis_menu_view.js';
+import { AnalysisPopups } from './analysis_popup_view.js';
+import { VoiceView } from './voice_view.js';
+import { PhoneMainView } from './phone_view.js';
+import { useIsMobile } from '../hooks/use_media_query.js';
 
 export const TopBar = () => {
     return (
@@ -20,15 +25,18 @@ export const TopBar = () => {
             <TasksView/>
             <ArenaControlView/>
             <SessionMenuView/>
+            <AnalysisMenuView/>
             <AddStreamButton/>
+            <VoiceView/>
         </div>
     );
 };
 
-export const MainView = () => (
+const DesktopMainView = () => (
     <div className="text-sm flex flex-col h-screen font-[Lato]">
         <div id="portalTarget"></div>
         <TopBar></TopBar>
+        <AnalysisPopups />
         <ReflexContainer orientation="horizontal" windowResizeAware={true} className='flex flex-grow'>
             <ReflexElement>
                 <ReflexContainer orientation="vertical" windowResizeAware={true}>
@@ -56,3 +64,8 @@ export const MainView = () => (
         </ReflexContainer>
     </div>
 );
+
+export const MainView = () => {
+    const isMobile = useIsMobile();
+    return isMobile ? <PhoneMainView /> : <DesktopMainView />;
+};

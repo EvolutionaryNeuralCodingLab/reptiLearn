@@ -24,7 +24,7 @@ class DatabaseException(Exception):
 
 
 def make_connection(user, host, port, db):
-    return psycopg2.connect(f"dbname='{db}' user='{user}' host='{host}' port='{port}'")
+    return psycopg2.connect(f"dbname='{db}' user='{user}' host='{host}' port='{port}' password='rept!leC0rtex'")
 
 
 def list_tables(cur):

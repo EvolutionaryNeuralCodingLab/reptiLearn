@@ -3,7 +3,13 @@ EXPERIMENTAL: Manage video overlays that display visual information on top of im
 
 Author: Tal Eisenberg, 2021
 """
-import video_system
+
+# NOTE: Do NOT import `video_system` at module load time. `video_system` imports
+# `overlays.timestamp`, which in turn imports `ConfigurableOverlay`/`ImageOverlay`
+# from this module. A top-level `import video_system` here therefore creates a
+# circular import that fails when `overlay` is imported as the *first* module
+# in a fresh process (e.g. inside a spawned VideoWriter child). `video_system`
+# is only needed inside `ObserverOverlay.apply()`, so import it lazily there.
 
 # TODO:
 # - way to choose overlays
@@ -43,9 +49,13 @@ class ObserverOverlay(ConfigurableOverlay):
     }
 
     def apply(self, img, img_timestamp):
-        obs_out, obs_out_timestamp = video_system.image_observers[
-            self.get_config("obs_id")
-        ].get_output()
+        import video_system  # lazy: see top-of-file note about the import cycle.
+
+        obs_id = self.get_config("obs_id")
+        if obs_id is None or obs_id not in video_system.image_observers:
+            return img
+
+        obs_out, obs_out_timestamp = video_system.image_observers[obs_id].get_output()
         return self.obs_apply(img, img_timestamp, obs_out, obs_out_timestamp)
 
     def obs_apply(self, img, img_timestamp, obs_out, obs_out_timestamp):

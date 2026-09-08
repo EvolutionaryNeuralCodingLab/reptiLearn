@@ -17,9 +17,9 @@ FeederInterface::FeederInterface(JsonObject conf)
     feeder = nullptr;
     return;
   }
-  
+
   JsonArray pins = conf["pins"].as<JsonArray>();
-  
+
   if (pins.size() != 4) {
     send_error("pins: Expecting exactly 4 pin indices");
     feeder = nullptr;
@@ -39,7 +39,7 @@ FeederInterface::FeederInterface(JsonObject conf)
 void FeederInterface::get_value(JsonDocument* container) {
   container->set(nullptr);
 }
-  
+
 void FeederInterface::run(JsonArray cmd) {
   if (cmd[0] == "dispense") {
     // possibly add a check for time between consecutive rewards

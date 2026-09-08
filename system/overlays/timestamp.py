@@ -7,7 +7,7 @@ class TimestampVisualizer(ConfigurableOverlay):
     default_params = {
         **ConfigurableOverlay.default_params,
         "time_format": "%Y-%m-%d %H:%M:%S",
-        "color": 255,
+        "color": 150,
     }
 
     def apply(self, img, timestamp):

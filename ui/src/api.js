@@ -1,9 +1,13 @@
-// To run a separate development http server set this flag to true:
-const DEVELOPMENT_MODE = false; // don't forget to set back to false before building
+import { resolveApiUrl, resolveSocketUrl } from './server_config';
 
-// If ReptiLearn API uses a different port change it here:
-export const api_url = DEVELOPMENT_MODE ? `http://${window.location.hostname}:3500` : '';
-export const socketio_url = DEVELOPMENT_MODE ? `${window.location.hostname}:3500` : '';
+// To run a separate development http server set this flag to true:
+export const DEVELOPMENT_MODE = false; // don't forget to set back to false before building
+
+/** REST base URL (no trailing slash). Empty means same-origin. */
+export const getApiUrl = () => resolveApiUrl(DEVELOPMENT_MODE);
+
+/** Socket.IO URL. Empty means same-origin. */
+export const getSocketUrl = () => resolveSocketUrl(DEVELOPMENT_MODE);
 
 export const request = async (route, params, method = "GET", body = null, json_body = false) => {
     if (!route.startsWith('/')) {
@@ -13,7 +17,8 @@ export const request = async (route, params, method = "GET", body = null, json_b
         body = JSON.stringify(body);
     }
     try {
-        const url = params ? `${api_url}${route}?${params}` : `${api_url}${route}`;
+        const base = getApiUrl();
+        const url = params ? `${base}${route}?${params}` : `${base}${route}`;
         const response = await fetch(url, {
             method: method,
             ...(body && { body }),
@@ -27,9 +32,20 @@ export const request = async (route, params, method = "GET", body = null, json_b
         if (response.ok) {
             return response;
         } else {
-            const text = await response.text();
-            console.error("Received non-OK response:", response, text);
-            throw Error("Received non-OK response from server");
+            let message = "Received non-OK response from server";
+            try {
+                const data = await response.json();
+                if (data?.error) {
+                    message = data.error;
+                }
+            } catch (_) {
+                const text = await response.text();
+                if (text) {
+                    message = text;
+                }
+            }
+            console.error("Received non-OK response:", response, message);
+            throw new Error(message);
         }
     } catch (e) {
         console.error("Error during API request: ", e);
@@ -37,8 +53,8 @@ export const request = async (route, params, method = "GET", body = null, json_b
     }
 };
 
-export const requestJSON = async (route, params, method = "GET", body = null) => {
-    const response = await request(route, params, method, body);
+export const requestJSON = async (route, params, method = "GET", body = null, json_body = false) => {
+    const response = await request(route, params, method, body, json_body);
     return await response.json();
 };
 
@@ -80,7 +96,7 @@ export const api = {
             return request('/video/update_config', null, "POST", video_config, true);
         },
         restart() {
-            return request('/video/update_config', null, "POST", null, true);
+            return request('/video/restart', null, "POST");
         },
         async shutdown() {
             try {
@@ -259,6 +275,23 @@ export const api = {
         },
         cancel(task_id) { 
             return request(`/task/cancel/${task_id}`);
+        },
+    },
+
+    analysis: {
+        magnetoreception(panel, { scope = "current", sessionIds = [], bulkName = "analysis" } = {}) {
+            return requestJSON("/analysis/magnetoreception", null, "POST", {
+                panel,
+                scope,
+                session_ids: sessionIds,
+                bulk_name: bulkName,
+            }, true);
+        },
+        exportFigures(outputDir, figures) {
+            return requestJSON("/analysis/export_figures", null, "POST", {
+                output_dir: outputDir,
+                figures,
+            }, true);
         },
     },
 }

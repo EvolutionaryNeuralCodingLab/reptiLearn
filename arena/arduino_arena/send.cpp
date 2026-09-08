@@ -9,6 +9,7 @@ void send_message(const char* topic, const char* payload) {
   Serial.print(topic);
   Serial.print("#");
   Serial.println(payload);
+  Serial.flush();  // Ensure full message is sent before continuing (avoids merge with next message on host)
 }
 
 void send_json(const char* topic, JsonDocument* doc) {
@@ -16,4 +17,5 @@ void send_json(const char* topic, JsonDocument* doc) {
   Serial.print("#");
   serializeJson(*doc, Serial);
   Serial.println();
+  Serial.flush();
 }

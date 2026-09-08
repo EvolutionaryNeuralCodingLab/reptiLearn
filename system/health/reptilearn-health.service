@@ -1,0 +1,10 @@
+[Unit]
+Description=ReptiLearn health monitor (oneshot)
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/tal/dev/reptiLearn/system
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/home/tal/dev/reptiLearn/system
+ExecStart=/home/tal/anaconda3/envs/reptilearn/bin/python -m health.monitor

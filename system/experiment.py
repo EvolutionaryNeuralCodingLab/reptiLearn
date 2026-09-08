@@ -14,6 +14,7 @@ import json
 import shutil
 import pandas as pd
 from pathlib import Path
+import os
 import threading
 import asyncio
 import signal
@@ -54,6 +55,7 @@ event_loop_thread: threading.Thread = None
 event_loop: asyncio.AbstractEventLoop = None
 
 _on_loop_shutdown = None
+_shutdown_invocations = 0
 
 
 def _run_coroutine(cor):
@@ -110,6 +112,11 @@ def shutdown():
 
     NOTE: This is called when the event loop receives a SIGINT signal (i.e. Ctrl-C). It
     """
+    global _shutdown_invocations
+    _shutdown_invocations += 1
+    if _shutdown_invocations > 1:
+        log.warning("Second interrupt received during shutdown; forcing exit")
+        os._exit(1)
 
     async def async_shutdown():
         if session_state.exists(()):
@@ -129,6 +136,29 @@ def shutdown():
 def _update_state_file():
     with open(Path(session_state["data_dir"]) / "session_state.json", "w") as f:
         json.dump(session_state.get_self(), f, default=json_convert)
+
+
+def _write_health_heartbeat():
+    try:
+        from health.heartbeat import write_experiment_heartbeat
+
+        write_experiment_heartbeat(session_state)
+    except Exception:
+        if log is not None:
+            log.exception("Failed to write experiment heartbeat")
+
+
+def _start_health_heartbeat():
+    _stop_health_heartbeat()
+    _write_health_heartbeat()
+    schedule.repeat(_write_health_heartbeat, 30, pool="health")
+
+
+def _stop_health_heartbeat():
+    try:
+        schedule.cancel_all(pool="health", wait=False)
+    except ValueError:
+        pass
 
 
 def _split_name_datetime(s):
@@ -203,6 +233,7 @@ def create_session(session_id, experiment):
     _load_experiment(experiment)
     _init_event_logger(data_path)
 
+    _clear_params_cache()
     session_state.set_self(
         {
             "is_running": False,
@@ -255,6 +286,7 @@ async def _async_continue_session(session_name):
         session["is_running"] = False
 
     _init_event_logger(data_path)
+    _clear_params_cache()
     session_state.set_self(session)
 
     await _async_init_session(continue_session=True)
@@ -360,6 +392,7 @@ async def _async_close_session(cur_experiment):
         state["video", "record", "filename_prefix"] = ""
 
     session_state.delete(())
+    _clear_params_cache()
     log.info("Closed session.")
 
 
@@ -466,8 +499,6 @@ def run_experiment():
     Run the experiment of the current session. Calls the experiment class run() hook, and starts
     trial 0 of block 0. Updates the session state file and log to the events log.
     """
-    global cached_params, cached_params_block
-
     if session_state["is_running"] is True:
         raise ExperimentException("Experiment is already running.")
 
@@ -478,8 +509,8 @@ def run_experiment():
 
     log.info(f"Running experiment {session_state['experiment']}.")
 
-    cached_params = None
-    cached_params_block = None
+    _clear_params_cache()
+    _start_health_heartbeat()
 
     async def run_async():
         try:
@@ -490,6 +521,7 @@ def run_experiment():
         except Exception:
             log.exception("Exception while running experiment:")
             session_state["is_running"] = False
+            _stop_health_heartbeat()
 
         event_logger.log("session/run", session_state.get_self())
         _update_state_file()
@@ -512,6 +544,7 @@ async def _async_stop_experiment():
             schedule.cancel_all(pool="experiment_phases", wait=False)
         except ValueError:
             pass
+        _stop_health_heartbeat()
 
         session_state["is_running"] = False
 
@@ -684,6 +717,7 @@ def update_params(new_params):
         return update_params(cur_experiment.get_default_params())
 
     _can_update_params()
+    _clear_params_cache()
     session_state["params"] = new_params
 
 
@@ -754,6 +788,12 @@ def run_action(label):
 
 cached_params = None
 cached_params_block = None
+
+
+def _clear_params_cache():
+    global cached_params, cached_params_block
+    cached_params = None
+    cached_params_block = None
 
 
 def get_params():
@@ -846,6 +886,14 @@ class Experiment:
 
     def release(self):
         """Called by close_session()"""
+        pass
+
+    def on_video_restart(self):
+        """Called after video sources/observers are rebuilt (config update or restart).
+
+        Experiments that attach bbox/zone listeners should re-attach here; the default
+        is a no-op.
+        """
         pass
 
     def get_default_params(self):

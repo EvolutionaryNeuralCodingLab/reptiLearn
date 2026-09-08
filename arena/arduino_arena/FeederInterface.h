@@ -15,10 +15,10 @@ class FeederInterface: public Interface {
  public:
   FeederInterface(JsonObject conf);
 
-  void get_value(JsonDocument* container);  
+  void get_value(JsonDocument* container);
   void run(JsonArray cmd);
   void loop();
-  
+
  private:
   Feeder *feeder;
   unsigned long last_reward = -1;

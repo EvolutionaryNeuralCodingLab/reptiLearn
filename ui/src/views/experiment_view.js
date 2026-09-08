@@ -66,7 +66,7 @@ export const ExperimentView = () => {
         ) : null;
 
     const phase_toolbar = !session ? null :
-        <Bar colors="bg-gray-50 border-gray-300">
+        <Bar colors="bg-gray-50 border-gray-300" className="flex-wrap">
             {session
                 ? (is_running
                     ? <RLTooltip content="Stop experiment"><RLButton.BarButton onClick={api.session.stop} icon="stop" /></RLTooltip>
@@ -110,6 +110,7 @@ export const ExperimentView = () => {
         title: <span className={classNames((cur_block === idx && session.blocks.length > 1) ? "text-green-600" : "")}>{idx === 0 ? "Block 1" : idx + 1}</span>,
         panel: <BlockView idx={idx} />
     }));
+
 
     const params = session && ((session?.params && session?.blocks) ? (
         <RLTabs

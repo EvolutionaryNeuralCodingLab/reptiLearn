@@ -6,7 +6,7 @@ See [Setting up the arena controller](arena_setup.md) for more information.
 ## Common interface attributes
 
 - name: Interface name for identification. NOTE: Interface names should be unique across all connected boards.
-- type: The interface type. Currently one of `line trigger feeder dallas_temperature`. Each one is explained below.
+- type: The interface type. Currently one of `line trigger feeder dcdoor dallas_temperature mux lis3mdl tmag5273 magnets`. Each one is explained below.
 - ui: Determines how this interface is controlled in the ReptiLearn user interface.
 
 ## Interface types and attributes
@@ -78,6 +78,58 @@ Example:
     "icon": "gift"
 }
 ```
+
+### `dcdoor`
+DC solenoid doors controlled by open/close pins. Sends timed pulses to drive the door mechanism.
+
+Attributes:
+- `open_pin`: Integer. Arduino pin for the open direction.
+- `close_pin`: Integer. Arduino pin for the close direction.
+
+Commands:
+- `open`: Pulse the open pin (door opens).
+- `close`: Pulse the close pin (door closes).
+
+Example:
+```json
+{
+    "name": "Right Door",
+    "type": "dcdoor",
+    "open_pin": 2,
+    "close_pin": 3,
+    "ui": "action",
+    "command": "open",
+    "icon": "door-open"
+}
+```
+
+### `tmag5273`
+Read magnetic field from a Texas Instruments TMAG5273 3-axis Hall sensor (SparkFun breakout). Requires the [SparkFun TMAG5273 Arduino Library](https://github.com/sparkfun/SparkFun_TMAG5273_Arduino_Library) to be installed in the Arduino IDE / arduino-cli.
+
+The sensor is configured for continuous measurement with a ±40 mT range and 32× conversion averaging (same defaults as the SparkFun basic example). Values are reported in microTesla (µT).
+
+Attributes:
+- `i2c_address`: Optional integer. I2C address of the sensor (default `34`, i.e. `0x22`). Set a unique address per sensor when multiple TMAG5273 devices share one bus.
+- `auto_poll_ms`: Optional integer. When set (e.g. `5000`), the interface automatically publishes updated readings over serial at this interval, in addition to responding to `get` commands from ReptiLearn.
+
+Commands:
+- `get`: Sends back `[x, y, z, |B|]` in µT (x, y, z components and total field magnitude).
+
+Example:
+```json
+{
+    "name": "Magnetic Field",
+    "type": "tmag5273",
+    "auto_poll_ms": 5000,
+    "ui": "sensor",
+    "unit": " µT",
+    "icon": "magnet"
+}
+```
+
+To log readings to the database, add a `data_log` section under `arena` in your system config (see `system/config/config.py` for the format). Column names follow flattened interface values, e.g. `Magnetic Field_0` … `Magnetic Field_3` for x, y, z, and |B|. Rows are written when the arena polls (`poll_interval`) and when the Arduino sends updates (e.g. with `auto_poll_ms`).
+
+To show readings on the **live video stream** (like the timestamp), enable `magnetic_sensor_overlay` in `system/config/config.py` (the `interface` name must match the arena interface `name`). The overlay reads the same arena values and draws them on configured `image_sources`, by default just above the date/time stamp at the bottom of the frame.
 
 ### `dallas_temperature`
 Communicate with digital temperature sensors such as DS18B20 (one-wire protocol). This uses the DallasTemperature arduino library. Check the [library documentation](https://github.com/milesburton/Arduino-Temperature-Control-Library) for supported devices. This interface can control any number of such sensors connected in parallel over a single Arduino digital pin.

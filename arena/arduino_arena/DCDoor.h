@@ -23,6 +23,7 @@ class DCDoor : public Interface {
         DoorState state;
         int closing_pin;
         int opening_pin;
+        int enable_pin;
         void init();
         void close();
         void open();

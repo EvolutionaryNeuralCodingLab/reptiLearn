@@ -3,10 +3,12 @@ import RLMenu from "./ui/menu";
 import RLModal from "./ui/modal";
 import RLButton from "./ui/button";
 import { api } from "../api";
+import { ConnectionSettingsModal } from "./connection_settings_view";
 
 export const MainMenu = () => {
     const [openAboutModal, setOpenAboutModal] = React.useState(false);
     const [openConfirmModal, setOpenConfirmModal] = React.useState(false);
+    const [openConnectionModal, setOpenConnectionModal] = React.useState(false);
     const [version, setVersion] = React.useState(null);
 
     const confirmFunc = React.useRef(null);
@@ -50,8 +52,10 @@ export const MainMenu = () => {
             The system will shutdown. If there's an open session it will be stopped and closed.
         </RLModal>
 
+        <ConnectionSettingsModal open={openConnectionModal} setOpen={setOpenConnectionModal} />
         <RLMenu button={<RLMenu.TopBarMenuButton title="ReptiLearn" />}>
             <RLMenu.ButtonItem onClick={() => setOpenAboutModal(true)} key="about">About</RLMenu.ButtonItem>
+            <RLMenu.ButtonItem onClick={() => setOpenConnectionModal(true)} key="connection">Connection…</RLMenu.ButtonItem>
             <RLMenu.SeparatorItem key="sep" />
             <RLMenu.ButtonItem onClick={open_shutdown_modal} key="shutdown">Shutdown</RLMenu.ButtonItem>
         </RLMenu>

@@ -1,0 +1,16 @@
+A new ReptiLearn lab health alert was just recorded.
+
+The trigger appended the new alerts.jsonl line in this turn. Also read:
+- /data/reptilearn/health/status.json
+- /data/reptilearn/health/experiment_heartbeat.json (if present)
+- /data/reptilearn/health/alerts.jsonl (last line only)
+
+Write one short Telegram message for the lab operator:
+- Name the session/experiment if known
+- Say what failed, using the check summaries (do not invent causes)
+- Mention what is still normal (ok checks: process, GPU, disk, Arduino, etc.)
+- Do not restart processes, USB, the experiment, or systemd
+- End with: I have not restarted anything. Do you want me to investigate further?
+
+If status.json ok is true, say the alert may already have cleared and still summarize the new alerts.jsonl line.
+Keep it under 12 sentences. English. No markdown headings.

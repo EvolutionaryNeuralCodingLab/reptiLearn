@@ -309,12 +309,16 @@ class ImageSource(ConfigurableProcess):
         Return img, timestamp
         - img: The current data in the image buffer (assuming a single image buffer)
         - timestamp: The timestamp of the current image buffer data in seconds since epoch.
-        """
-        if scale_to_8bit and self.buf_dtype == "uint16":
-            img = convert_to_8bit(self.buf_np, self.scaling_8bit)
-        else:
-            img = self.buf_np
 
+        Uses the buffer lock to avoid race conditions: the camera writes to the shared buffer
+        while consumers (HTTP stream, etc.) read from it. Without locking during the copy,
+        you can get horizontal tearing as the reader sees a mix of old and new frame data.
+        """
+        with self.buf.get_lock():
+            if scale_to_8bit and self.buf_dtype == "uint16":
+                img = convert_to_8bit(self.buf_np, self.scaling_8bit)
+            else:
+                img = self.buf_np.copy()
         return img, self.timestamp.value
 
     def shutdown(self):
@@ -386,7 +390,11 @@ class _ImageObserverInterface:
         threading.Thread(target=listener, args=()).start()
 
         def remove_listener():
-            state.remove_event(self._proc_name, listener_uuid)
+            kill_event.set()
+            try:
+                state.remove_event(self._proc_name, listener_uuid)
+            except KeyError:
+                pass
 
         return remove_listener
 
@@ -561,7 +569,18 @@ class ImageObserver(ConfigurableProcess):
 
                 if self.state is not None:
                     self.state[self._running_state_key] = True
-                self._on_start()
+                try:
+                    self._on_start()
+                except Exception:
+                    # Without this guard, an exception in _on_start escapes the
+                    # outer `while True` and the observer process dies silently:
+                    # no "Started observing"/"Finished writing" logs, and any
+                    # video file is left half-open. Surface the error and stay
+                    # alive so the next start command can be handled.
+                    self.log.exception("Exception in _on_start; aborting this run.")
+                    if self.state is not None:
+                        self.state[self._running_state_key] = False
+                    continue
                 self.update_event.clear()
 
                 try:

@@ -57,35 +57,37 @@ export const SessionListView = ({ onSelect, setOpen, open, selectable, manageabl
     };
 
     const content = sessionList ? (
-        <table className="table w-full h-fit border-gray-300 border-hidden rounded-md shadow-md overflow-y-scroll flex-grow">
-            <tbody>
-                {sessionList.map(s => {
-                    return (
-                        <tr key={s} className="border-gray-200 border border-y w-full">
-                            {manageable ? (
-                                <td className="px-2 py-2  ">
-                                    <input type="checkbox" onChange={() => toggle_session(s)} />
+        <div className="overflow-y-auto border border-gray-300 rounded-md flex-grow min-h-0">
+            <table className="table w-full border-gray-300 border-hidden rounded-md shadow-md">
+                <tbody>
+                    {sessionList.map(s => {
+                        return (
+                            <tr key={s} className="border-gray-200 border border-y w-full">
+                                {manageable ? (
+                                    <td className="px-2 py-2  ">
+                                        <input type="checkbox" onChange={() => toggle_session(s)} />
+                                    </td>
+                                ) : null}
+                                <td className="px-2 py-2">
+                                    {selectable ?
+                                        <button onClick={() => onSelect(s[2])} className="text-blue-700 hover:decoration-blue-700 hover:underline">{s[0]}</button>
+                                        : s[0]
+                                    }
                                 </td>
-                            ) : null}
-                            <td className="px-2 py-2">
-                                {selectable ?
-                                    <button onClick={() => onSelect(s[2])} className="text-blue-700 hover:decoration-blue-700 hover:underline">{s[0]}</button>
-                                    : s[0]
-                                }
-                            </td>
-                            <td className="px-2 py-2">
-                                {s[1]}
-                            </td>
-                        </tr>
-                    );
-                }).reverse()}
-            </tbody>
+                                <td className="px-2 py-2">
+                                    {s[1]}
+                                </td>
+                            </tr>
+                        );
+                    }).reverse()}
+                </tbody>
 
-        </table>
+            </table>
+        </div>
     ) : "Loading...";
 
     return (
-        <RLModal sizeClasses="max-w-lg w-5/6 max-h-[75vh]" open={open} setOpen={setOpen} header={selectable ? 'Select session' : 'Sessions'} contentOverflowClass="overflow-hidden" actions={
+        <RLModal sizeClasses="max-w-lg w-5/6 max-h-[75vh] flex flex-col min-h-0" open={open} setOpen={setOpen} header={selectable ? 'Select session' : 'Sessions'} contentOverflowClass="overflow-hidden flex flex-col min-h-0 flex-grow" actions={
             <React.Fragment>
                 {
                     manageable ? (

@@ -1,0 +1,21 @@
+# Install as a user timer (runs every 5–15 minutes):
+#   mkdir -p ~/.config/systemd/user
+#   cp /home/tal/dev/reptiLearn/system/health/reptilearn-health.{service,timer} ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now reptilearn-health.timer
+#
+# One-shot: /home/tal/dev/reptiLearn/system/health/run.sh
+# Status:   /data/reptilearn/health/status.json
+
+[Unit]
+Description=Run ReptiLearn health monitor every 5–15 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+RandomizedDelaySec=10min
+AccuracySec=1min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

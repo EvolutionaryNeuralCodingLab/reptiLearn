@@ -222,12 +222,16 @@ class ObserverLogger(QueuedDataLogger):
         csv_path: Path = None,
         split_csv=False,
         db_table_name=None,
+        output_indices=None,
     ):
         """
         Initialize data logger. See DataLogger.__init__ for more information.
 
         Args:
         - image_observer: The image observer that will be logged
+        - output_indices: If set, pick these indices from the observer output vector before
+          mapping to non-time columns. Length must be len(columns) - 1. Use when the observer
+          buffer is wider than the columns you log (e.g. pose tails after bbox).
         """
         super().__init__(columns, csv_path, split_csv, db_table_name)
         self._obs_communicator = image_observer.get_interface()
@@ -246,18 +250,62 @@ class ObserverLogger(QueuedDataLogger):
         if self._time_index is None:
             raise ValueError("Missing 'time' column in columns argument.")
 
+        non_time_cols = len(columns) - 1
+        self._output_indices = output_indices
+        if output_indices is not None:
+            if len(output_indices) != non_time_cols:
+                raise ValueError(
+                    "output_indices length must match number of non-time columns "
+                    f"({non_time_cols}), got {len(output_indices)}."
+                )
+
+        # Listener is registered on the process that calls start() (must be main); see start().
+        self.remove_listener = None
+        self.state = None
+
+    def __getstate__(self):
+        # spawn/fork pickle the whole Logger process; remove_listener is a nested function from
+        # video_stream.add_listener — not picklable. The writer child does not run the observer listener.
+        d = dict(self.__dict__)
+        for k in ("remove_listener", "state", "_obs_communicator"):
+            d.pop(k, None)
+        return d
+
+    def __setstate__(self, d):
+        self.__dict__.update(d)
+
+    def start(self):
+        """
+        Register the observer listener on the current process, then start the CSV/DB writer child.
+
+        video_stream.ImageObserver.add_listener must run from the main process; registering inside
+        the writer subprocess (the old _on_start behavior) breaks updates so rows never reach the queue.
+        """
+        if self.remove_listener is None:
+            self.state = managed_state.Cursor(
+                (), authkey=self._state_authkey, address=self._state_address
+            )
+            self.remove_listener = self._obs_communicator.add_listener(
+                self._on_observer_update, self.state
+            )
+        super().start()
+
+    def stop(self):
+        """Detach observer listener on this process, then signal the writer child to exit."""
+        if self.remove_listener is not None:
+            self.remove_listener()
+            self.remove_listener = None
+        super().stop()
+
     def _on_start(self):
-        self.state = managed_state.Cursor(
-            (), authkey=self._state_authkey, address=self._state_address
-        )
-        self.remove_listener = self._obs_communicator.add_listener(
-            self._on_observer_update, self.state
-        )
+        pass
 
     def _on_stop(self):
-        self.remove_listener()
+        pass
 
     def _on_observer_update(self, output, timestamp):
         out_list: list = output.tolist()
+        if self._output_indices is not None:
+            out_list = [out_list[i] for i in self._output_indices]
         out_list.insert(self._time_index, timestamp)
         self.log(out_list)

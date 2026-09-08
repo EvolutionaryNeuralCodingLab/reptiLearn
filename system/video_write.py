@@ -200,8 +200,10 @@ class VideoWriter(ImageObserver):
             t0 = time.time()
             img, timestamp = item
 
+            # Convert RGB <-> BGR
             if self.convert_bgr:
-                img = img[..., ::-1]
+                # img = img[..., ::-1]
+                pass
 
             self.ts_file.write(str(timestamp) + "\n")
             try:
@@ -243,6 +245,9 @@ class VideoWriter(ImageObserver):
 
         if self._img_src_buf_dtype == "uint16":
             img = convert_to_8bit(img, self.scaling_8bit)
+
+        if img.ndim >= 3 and img.shape[-1] == 1:
+            img = img.squeeze(-1)
 
         self.q.put((img, timestamp))
 

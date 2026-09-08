@@ -11,6 +11,7 @@
  * - DallasTemperature
  * - OneWire
  * - AccelStepper
+ * - SparkFun TMAG5273 Arduino Library (tmag5273 interface; arduino-cli lib install "SparkFun TMAG5273 Arduino Library")
  */
 
 #include <ArduinoJson.h>
@@ -21,9 +22,11 @@
 #include "LineInterface.h"
 #include "TriggerInterface.h"
 #include "FeederInterface.h"
-#include "DallasTemperatureInterface.h"
-#include "MuxInterface.h"
-#include "LIS3MDLInterface.h"
+#include "MagnetsInterface.h"
+// #include "DallasTemperatureInterface.h"
+// #include "MuxInterface.h"
+// #include "LIS3MDLInterface.h"
+#include "TMAG5273Interface.h"
 #include "DCDoor.h"
 
 
@@ -131,8 +134,8 @@ void load_config(JsonObject conf) {
     JsonObject ifs_conf = v.as<JsonObject>();
     parse_interface_config(ifs_conf);
   }
-  char msg[40];
 
+  char msg[40];
   sprintf(msg, "Initialized %d interfaces", num_interfaces);
   send_message("info/config_loaded", msg);
 }
@@ -197,9 +200,23 @@ void parse_interface_config(JsonObject conf) {
   }
   #endif
 
+  #ifdef TMAG5273Interface_h
+  if (conf["type"] == "tmag5273") {
+    add_interface(new TMAG5273Interface(conf));
+    return;
+  }
+  #endif
+
   #ifdef DCDoor_h
   if (conf["type"] == "dcdoor") {
     add_interface(new DCDoor(conf));
+    return;
+  }
+  #endif
+
+  #ifdef MagnetsInterface_h
+  if (conf["type"] == "magnets") {
+    add_interface(new MagnetsInterface(conf));
     return;
   }
   #endif

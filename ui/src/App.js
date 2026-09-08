@@ -7,6 +7,7 @@ import { far } from '@fortawesome/free-regular-svg-icons';
 
 import { setCtrlState, setVideoConfig, setArenaConfig, setLog, setLogBufferLength, appendLog } from './store/reptilearn_slice';
 import { MainView } from './views/main_view';
+import { WaitingForConnection } from './views/connection_settings_view';
 import { api } from './api';
 
 library.add(fas, far);
@@ -24,12 +25,9 @@ const App = () => {
                 api.stop_stream(stream.src_id);
             }
         });
+    };
 
-        // Display confirmation dialog before unloading page.
-        // return true;
-    }
-
-    const socket = React.useContext(SocketContext);
+    const { socket } = React.useContext(SocketContext);
 
     const fetch_video_config = React.useCallback(() => {
         return api.video.get_config()
@@ -44,7 +42,7 @@ const App = () => {
         return api.arena.get_config()
             .then((config) => dispatch(setArenaConfig(config)))
             .catch(err => {
-                console.log(`Error while fetching video config: ${err}`);
+                console.log(`Error while fetching arena config: ${err}`);
                 setTimeout(fetch_arena_config, 5000);
             });
     }, [dispatch]);
@@ -57,6 +55,9 @@ const App = () => {
             })
             .then((val) => {
                 dispatch(setLogBufferLength(val));
+            })
+            .catch(err => {
+                console.log(`Error while fetching log buffer: ${err}`);
             });
     }, [dispatch]);
 
@@ -66,7 +67,7 @@ const App = () => {
 
     const handle_disconnect = React.useCallback(() => {
         console.log("SocketIO disconnected.");
-        dispatch(setCtrlState(null));        
+        dispatch(setCtrlState(null));
     }, [dispatch]);
 
     const handle_connect = React.useCallback(() => {
@@ -81,27 +82,30 @@ const App = () => {
     }, [dispatch]);
 
     React.useEffect(() => {
-        if (socket.hasListeners('state')) {
-            return;
-        }
+        if (!socket) return undefined;
 
         socket.on("state", handle_new_state);
         socket.on("disconnect", handle_disconnect);
         socket.on("connect", handle_connect);
         socket.on("log", handle_log);
+
+        if (socket.connected) {
+            handle_connect();
+        }
+
+        return () => {
+            socket.off("state", handle_new_state);
+            socket.off("disconnect", handle_disconnect);
+            socket.off("connect", handle_connect);
+            socket.off("log", handle_log);
+        };
     }, [socket, handle_log, handle_connect, handle_disconnect, handle_new_state]);
 
-    if (ctrlState === null || videoConfig === null)
-        return (
-            <div className="font-[Roboto] flex h-screen justify-center items-center">
-                <div>
-                    <div className="text-8xl mr-b-8 inline-block text-center">ReptiLearn</div>
-                    <div className="text-2xl animate-pulse text-center">Waiting for connection...</div>
-                </div>
-            </div>
-        );
+    if (ctrlState === null || videoConfig === null) {
+        return <WaitingForConnection />;
+    }
 
-    return <MainView/>
+    return <MainView />;
 };
 
 export default App;
