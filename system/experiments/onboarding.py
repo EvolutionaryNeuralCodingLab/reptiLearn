@@ -25,6 +25,10 @@ class MagnetoreceptionOnboarding(exp.Experiment):
     Zone params use normalized coordinates in [0, 1]:
     - Circle: location [cx, cy] and radius (fraction of min(image width, height))
     - Rectangle: location [x1, y1, x2, y2] (centroid must be inside the box)
+
+    Starting or stopping does not move the doors. Stopping and starting again
+    resumes the same phase and trial. Manual "Restart Cycle" returns to
+    waiting at A and does not reset the trial number.
     """
 
     default_params = {
@@ -53,12 +57,16 @@ class MagnetoreceptionOnboarding(exp.Experiment):
         self.zone_counts = {}
         self.zone_first_seen = {}
         self.smoothed_centroid = None
-        self.c_side = None
-        self.c_entry_handled = False
-        self.d_entry_handled = False
 
         self.phase = self._restore_from_session("onboarding_phase", "a")
         self.trial_num = self._restore_from_session("onboarding_trial", 0)
+        self.c_side = self._restore_from_session("onboarding_c_side", None)
+        self.c_entry_handled = self._restore_from_session(
+            "onboarding_c_entry_handled", False
+        )
+        self.d_entry_handled = self._restore_from_session(
+            "onboarding_d_entry_handled", False
+        )
 
         self.actions["Reset Baseline"] = {"run": self.set_baseline}
         self.actions["Open Left Door"] = {"run": self.open_left_door}
@@ -74,11 +82,36 @@ class MagnetoreceptionOnboarding(exp.Experiment):
 
     def run(self):
         self.log.info(
-            "Starting onboarding cycle (automatic A -> B -> C -> D loop); "
-            "waiting for point A (arena unchanged)"
+            "Starting onboarding cycle (automatic A -> B -> C -> D loop)"
         )
         self._log_event("magnetoreception/onboarding_start", {})
-        self.restart_cycle()
+
+        if self.trial_num > 0 or self.phase != "a":
+            self.log.info(
+                f"Resuming experiment at phase '{self.phase}', trial {self.trial_num}"
+            )
+            self._log_event(
+                "magnetoreception/experiment_resume",
+                {
+                    "phase": self.phase,
+                    "trial": self.trial_num,
+                    "c_side": self.c_side,
+                },
+            )
+        else:
+            self.log.info(
+                "Waiting for animal at point A to start (arena unchanged)"
+            )
+            self._log_event(
+                "magnetoreception/waiting_at_a",
+                {"trial": self.trial_num},
+            )
+
+        self.in_zones = set()
+        self.smoothed_centroid = None
+        self.zone_counts = {}
+        self.zone_first_seen = {}
+        self._sync_session_state()
         self._start_bbox_listener()
 
     def _start_bbox_listener(self):
@@ -139,6 +172,9 @@ class MagnetoreceptionOnboarding(exp.Experiment):
     def _sync_session_state(self):
         session_state["onboarding_phase"] = self.phase
         session_state["onboarding_trial"] = self.trial_num
+        session_state["onboarding_c_side"] = self.c_side
+        session_state["onboarding_c_entry_handled"] = self.c_entry_handled
+        session_state["onboarding_d_entry_handled"] = self.d_entry_handled
 
     def _log_event(self, event, value=None):
         if exp.event_logger is not None:
