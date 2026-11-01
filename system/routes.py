@@ -21,6 +21,7 @@ import undistort
 import image_utils
 import rl_logging
 import version
+import location_track
 
 
 def add_routes(app):
@@ -339,6 +340,41 @@ def add_routes(app):
             return flask.jsonify(sessions)
         except Exception as e:
             log.exception("Exception while getting session list:")
+            flask.abort(500, e)
+
+    @app.route("/location/live")
+    def route_location_live():
+        try:
+            return flask.Response(
+                json.dumps(location_track.live_sample(), default=json_convert),
+                mimetype="application/json",
+            )
+        except Exception as e:
+            log.exception("Exception while reading live location:")
+            flask.abort(500, e)
+
+    @app.route("/location/track")
+    def route_location_track():
+        session_name = flask.request.args.get("session")
+        at_raw = flask.request.args.get("at")
+        at_time = None
+        if at_raw:
+            try:
+                at_time = float(at_raw)
+            except ValueError:
+                flask.abort(400, "Invalid at")
+        try:
+            payload = location_track.load_track(session_name, at_time)
+            return flask.Response(
+                json.dumps(payload, default=json_convert),
+                mimetype="application/json",
+            )
+        except FileNotFoundError as e:
+            flask.abort(404, str(e))
+        except ValueError as e:
+            flask.abort(400, str(e))
+        except Exception as e:
+            log.exception("Exception while loading location track:")
             flask.abort(500, e)
 
     @app.route("/sessions/archive/<action>", methods=["POST"])
@@ -667,12 +703,14 @@ def add_routes(app):
             scope = body.get("scope", "current")
             session_ids = body.get("session_ids", [])
             bulk_name = body.get("bulk_name", "analysis")
+            trial_range = body.get("trial_range") or None
 
             png_bytes, stats = magnetoreception_analysis.run_magnetoreception_analysis(
                 panel=panel,
                 scope=scope,
                 session_ids=session_ids,
                 bulk_name=bulk_name,
+                trial_range=trial_range,
             )
             return flask.Response(
                 json.dumps(

@@ -9,6 +9,33 @@ import numpy as np
 import collections
 
 
+def _normalize_image_for_pillow(img: np.ndarray) -> np.ndarray:
+    """
+    Normalize numpy image layout to a format Pillow accepts.
+
+    Supported outputs:
+    - Grayscale: (H, W)
+    - Color: (H, W, 3) or (H, W, 4)
+    """
+    if not isinstance(img, np.ndarray):
+        raise TypeError(f"Expected numpy.ndarray image, got: {type(img).__name__}")
+
+    if img.ndim == 2:
+        return img
+
+    if img.ndim == 3:
+        # Allied Vision mono streams may produce (H, W, 1): convert to grayscale.
+        if img.shape[2] == 1:
+            return img.squeeze(axis=2)
+        if img.shape[2] in (3, 4):
+            return img
+
+    raise ValueError(
+        f"Unsupported image shape for PIL encoding: {img.shape}. "
+        "Expected (H,W), (H,W,1), (H,W,3), or (H,W,4)."
+    )
+
+
 def resize_image(img: Image, size=(None, None)):
     """
     Resize an image to the desired size.
@@ -55,6 +82,7 @@ def encode_image(img, encoding="WebP", encode_params={}, shape=(None, None)):
 
     Return the encoded image as a byte string.
     """
+    img = _normalize_image_for_pillow(img)
     im = resize_image(Image.fromarray(img), shape)
     with io.BytesIO() as output:
         im.save(output, format=encoding, **encode_params)

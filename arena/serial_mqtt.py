@@ -360,9 +360,29 @@ class SerialMQTTBridge:
 
                     self.log.debug(f"(SERIAL) Dispatching command to port {port_name}")
 
+                    # #region agent log
+                    try:
+                        if port_name == "doors" or "Door" in str(cmd_interface):
+                            open("/home/tal/dev/reptiLearn/.cursor/debug-4b4c4f.log", "a").write(
+                                json.dumps({"sessionId": "4b4c4f", "hypothesisId": "B", "location": "serial_mqtt.py:_mqtt_listen", "message": "serial dispatch doors cmd", "data": {"cmd_name": cmd_name, "cmd_interface": cmd_interface, "port_name": port_name, "ser_name": self.serials[port_name].name, "payload": msg.payload.decode("utf-8", errors="replace"), "port_open": self.serials[port_name].is_open}, "timestamp": int(time.time() * 1000), "runId": "door-pre"}) + "\n"
+                            )
+                    except Exception:
+                        pass
+                    # #endregion
+
                     ser = self.serials[port_name]
                     with self.serial_write_locks[ser.name]:
                         ser.write(msg.payload + b"\n")
+
+                    # #region agent log
+                    try:
+                        if port_name == "doors" or "Door" in str(cmd_interface):
+                            open("/home/tal/dev/reptiLearn/.cursor/debug-4b4c4f.log", "a").write(
+                                json.dumps({"sessionId": "4b4c4f", "hypothesisId": "C", "location": "serial_mqtt.py:_mqtt_listen", "message": "serial write complete doors cmd", "data": {"cmd_name": cmd_name, "cmd_interface": cmd_interface, "port_name": port_name, "bytes": len(msg.payload) + 1}, "timestamp": int(time.time() * 1000), "runId": "door-pre"}) + "\n"
+                            )
+                    except Exception:
+                        pass
+                    # #endregion
 
             except KeyboardInterrupt:
                 pass

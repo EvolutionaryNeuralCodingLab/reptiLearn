@@ -75,6 +75,17 @@ def run_command(command, interface, args=None, update_value=True):
     else:
         js = json.dumps([command, interface] + args)
 
+    # #region agent log
+    try:
+        if "Door" in str(interface) or command in ("open", "close"):
+            import time as _t
+            open("/home/tal/dev/reptiLearn/.cursor/debug-4b4c4f.log", "a").write(
+                json.dumps({"sessionId": "4b4c4f", "hypothesisId": "A", "location": "arena.py:run_command", "message": "arena publish door/cmd", "data": {"command": command, "interface": interface, "js": js, "update_value": update_value}, "timestamp": int(_t.time() * 1000), "runId": "door-pre"}) + "\n"
+            )
+    except Exception:
+        pass
+    # #endregion
+
     mqtt.client.publish(get_config().arena["command_topic"], js)
     if update_value:
         request_values(interface)

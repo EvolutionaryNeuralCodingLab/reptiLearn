@@ -9,7 +9,8 @@ Successful trials are those where the animal chose the magnet-aligned side at po
 
 For events CSV files, the script also reports:
   - Left vs right feeder counts among successful trials
-  - A→B travel time (magnetoreception/trial_start → magnetoreception/point_b)
+  - A→B travel time (magnetoreception/back_doors_open → magnetoreception/point_b;
+    magnetoreception/trial_start when the session has no door-open event)
 
 Usage:
     python analyze_magnetoreception_trials.py
@@ -32,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -39,9 +41,15 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import matplotlib.pyplot as plt
+from matplotlib.legend_handler import HandlerTuple
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, Rectangle
 import pandas as pd
+
+_SYSTEM_DIR = Path(__file__).resolve().parent / "system"
+if str(_SYSTEM_DIR) not in sys.path:
+    sys.path.insert(0, str(_SYSTEM_DIR))
+from experiments.trial_status import score_window
 
 LOG_TIMESTAMP = re.compile(
     r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s+\w+\s+\w+\s+"
@@ -74,6 +82,8 @@ class TrialOutcome:
     reason: str | None
     feeder: str | None = None
     a_to_b_seconds: float | None = None
+    trial_status: str | None = None
+    trial_status_reasons: str | None = None
 
 
 SESSION_START_EVENTS = {
@@ -89,6 +99,7 @@ A_TO_B_YLIM_SECONDS = 300
 A_TO_B_TREND_MIN_WINDOW = 5
 A_TO_B_TREND_MAX_WINDOW = 15
 ACTIVE_DAY_MIN_TRIALS = 5
+DAY_SHADE_COLORS = ("#eef2f7", "#ffffff")
 FEEDER_SIDE_COLORS = {"left": "#9467bd", "right": "#ff7f0e"}
 FEEDER_SIDE_UNKNOWN_COLOR = "#bbbbbb"
 SUCCESS_OUTLINE_COLOR = "#2ca02c"
@@ -144,6 +155,24 @@ def _infer_feeder_from_event(value: dict) -> str | None:
     if value.get("right_feeder") is not None:
         return "right"
     return None
+
+
+def _reason_from_magnet_direction(value: dict) -> str | None:
+    """Score a point-B event that recorded the field but no choice reason.
+
+    Forward is correct at B1. Reverse is correct at B2.
+    """
+    direction = value.get("magnet_direction")
+    zone = _normalize_zone(value.get("zone"))
+    if direction == "forward":
+        expected = "B1"
+    elif direction == "reverse":
+        expected = "B2"
+    else:
+        return None
+    if zone is None:
+        return None
+    return "correct_choice" if zone == expected else "incorrect_side"
 
 
 def _session_key(session_idx: int, trial: int) -> tuple[int, int]:
@@ -220,19 +249,27 @@ def parse_events_csv(path: Path) -> list[TrialOutcome]:
     session_idx = 0
     global_idx = 0
     trial_start_times: dict[tuple[int, int], float] = {}
+    door_open_times: dict[tuple[int, int], float] = {}
 
     for _, row in df.iterrows():
         event = row["event"]
         if event in SESSION_START_EVENTS:
             session_idx += 1
             trial_start_times = {}
+            door_open_times = {}
 
-        if event == "magnetoreception/trial_start":
+        if event in (
+            "magnetoreception/trial_start",
+            "magnetoreception/back_doors_open",
+        ):
             value = _parse_event_value(row["value"])
             trial = int(value["trial"])
-            trial_start_times[_session_key(max(session_idx, 1), trial)] = float(
-                row["time"]
-            )
+            key = _session_key(max(session_idx, 1), trial)
+            timestamp = float(row["time"])
+            if event == "magnetoreception/back_doors_open":
+                door_open_times[key] = timestamp
+            else:
+                trial_start_times[key] = timestamp
             continue
 
         if event != "magnetoreception/point_b":
@@ -240,10 +277,17 @@ def parse_events_csv(path: Path) -> list[TrialOutcome]:
 
         value = _parse_event_value(row["value"])
         reason = value.get("reason")
+        if not reason:
+            reason = _reason_from_magnet_direction(value)
         success = reason == "correct_choice"
         trial = int(value.get("trial", global_idx + 1))
         global_idx += 1
-        start_time = trial_start_times.get(_session_key(max(session_idx, 1), trial))
+        key = _session_key(max(session_idx, 1), trial)
+        # Version 2 leaves the back door closed for a few seconds after the
+        # field turns on. Travel time starts when that door opens.
+        start_time = door_open_times.get(key)
+        if start_time is None:
+            start_time = trial_start_times.get(key)
         a_to_b_seconds = (
             float(row["time"]) - start_time if start_time is not None else None
         )
@@ -265,7 +309,114 @@ def parse_events_csv(path: Path) -> list[TrialOutcome]:
             )
         )
 
+    _attach_trial_status(path, df, outcomes)
     return outcomes
+
+
+def _attach_trial_status(path: Path, df: pd.DataFrame, outcomes: list[TrialOutcome]) -> None:
+    """Use a stored trial_status event, otherwise score magnetometer.csv."""
+    stored: dict[tuple[int, int], tuple[str, str]] = {}
+    starts: dict[tuple[int, int], float] = {}
+    ends: dict[tuple[int, int], float] = {}
+    session_idx = 0
+    last_time = None
+    for _, row in df.iterrows():
+        event = row["event"]
+        try:
+            last_time = float(row["time"])
+        except (TypeError, ValueError):
+            pass
+        if event in SESSION_START_EVENTS:
+            session_idx += 1
+            continue
+        if event not in (
+            "magnetoreception/trial_start",
+            "magnetoreception/point_c",
+            "magnetoreception/point_d",
+            "magnetoreception/trial_status",
+        ):
+            continue
+        try:
+            value = _parse_event_value(row["value"])
+        except (TypeError, ValueError, json.JSONDecodeError):
+            continue
+        if not isinstance(value, dict) or "trial" not in value:
+            continue
+        try:
+            trial = int(value["trial"])
+        except (TypeError, ValueError):
+            continue
+        key = _session_key(max(session_idx, 1), trial)
+        if event == "magnetoreception/trial_start" and last_time is not None:
+            starts[key] = last_time
+        elif event in ("magnetoreception/point_c", "magnetoreception/point_d") and last_time is not None:
+            ends[key] = last_time
+        elif event == "magnetoreception/trial_status" and value.get("status") in ("good", "bad"):
+            reasons = value.get("reasons") or []
+            if isinstance(reasons, str):
+                reasons = [part.strip() for part in reasons.split(",") if part.strip()]
+            stored[key] = (value["status"], ", ".join(str(part) for part in reasons))
+
+    has_magnetometer = (path.parent / "magnetometer.csv").exists()
+    for outcome in outcomes:
+        key = (outcome.session_idx, outcome.trial)
+        if key in stored:
+            outcome.trial_status, outcome.trial_status_reasons = stored[key]
+            continue
+        if not has_magnetometer:
+            continue
+        t_start = starts.get(key)
+        if t_start is None:
+            continue
+        t_end = ends.get(key)
+        if t_end is None:
+            later = [
+                stamp
+                for (sess, trial_num), stamp in starts.items()
+                if sess == outcome.session_idx and trial_num > outcome.trial
+            ]
+            t_end = min(later) if later else last_time
+        if t_end is None or t_end <= t_start:
+            continue
+        try:
+            verdict = score_window(
+                path.parent,
+                t_start,
+                t_end,
+                trial=outcome.trial,
+                closed=True,
+            )
+        except Exception:
+            continue
+        outcome.trial_status = verdict["status"]
+        outcome.trial_status_reasons = ", ".join(verdict["reasons"])
+
+
+def format_trial_status_line(df: pd.DataFrame) -> str:
+    if df is None or df.empty or "trial_status" not in df.columns:
+        return ""
+    known = df[df["trial_status"].isin(["good", "bad"])]
+    if known.empty:
+        return ""
+    good = int((known["trial_status"] == "good").sum())
+    bad = known[known["trial_status"] == "bad"]
+    if bad.empty:
+        return f"status {good} good"
+    bits = []
+    for _, row in bad.iterrows():
+        reasons = str(row.get("trial_status_reasons") or "").strip()
+        label = f"{int(row['trial'])} {reasons}".strip()
+        bits.append(label)
+    shown = ", ".join(bits[:8])
+    extra = f" +{len(bits) - 8}" if len(bits) > 8 else ""
+    return f"status {good} good, {len(bad)} bad ({shown}{extra})"
+
+
+def _with_trial_status(title: str, df: pd.DataFrame) -> str:
+    line = format_trial_status_line(df)
+    if not line:
+        return title
+    return f"{title}\n{line}"
 
 
 def load_outcomes(path: Path) -> pd.DataFrame:
@@ -288,6 +439,8 @@ def load_outcomes(path: Path) -> pd.DataFrame:
                 "reason",
                 "feeder",
                 "a_to_b_seconds",
+                "trial_status",
+                "trial_status_reasons",
             ]
         )
 
@@ -578,6 +731,53 @@ def combine_datasets(datasets: dict[str, pd.DataFrame]) -> pd.DataFrame:
     return combined
 
 
+def parse_trial_range(spec: str | None) -> str | None:
+    if spec is None:
+        return None
+    normalized = str(spec).strip()
+    return normalized or None
+
+
+def apply_trial_range(df: pd.DataFrame, spec: str | None) -> pd.DataFrame:
+    spec = parse_trial_range(spec)
+    if not spec or df.empty:
+        return df
+
+    work = df.sort_values("global_idx", kind="stable")
+
+    if ":" not in spec:
+        try:
+            n = int(spec)
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid trial range {spec!r}: expected an integer count or start:end"
+            ) from exc
+        if n <= 0:
+            raise ValueError(f"Invalid trial range {spec!r}: count must be positive")
+        result = work.head(n)
+    else:
+        start_s, end_s = spec.split(":", 1)
+        try:
+            start = int(start_s) if start_s else 1
+            end = int(end_s) if end_s else int(work["global_idx"].max())
+        except ValueError as exc:
+            raise ValueError(
+                f"Invalid trial range {spec!r}: expected start:end integers"
+            ) from exc
+        if start == 0:
+            start = 1
+        if start > end:
+            raise ValueError(f"Invalid trial range {spec!r}: start must be <= end")
+        mask = (work["global_idx"] >= start) & (work["global_idx"] <= end)
+        result = work.loc[mask]
+
+    if result.empty:
+        raise ValueError(
+            f"Trial range {spec!r} matched no trials (dataset has {len(work)} trials)"
+        )
+    return result.copy()
+
+
 def summarize_feeder_direction(df: pd.DataFrame) -> dict:
     if df.empty or "feeder" not in df.columns:
         return {"left": 0, "right": 0, "unknown": 0}
@@ -722,7 +922,10 @@ def print_csv_analysis(
             )
 
     print()
-    print("A→B travel time: trial_start → point_b (events CSV only)")
+    print(
+        "A→B travel time: back door open → point_b "
+        "(trial_start when the door opens with the trial; events CSV only)"
+    )
     print(f"{'Source':<24} {'Trials':>7} {'Mean':>16} {'Median':>16}")
     print("-" * 68)
     for label, df in csv_datasets.items():
@@ -765,6 +968,12 @@ def build_stats_summary(
             "mean_formatted": format_duration(timing["mean_seconds"]),
             "median_formatted": format_duration(timing["median_seconds"]),
         }
+    status_line = format_trial_status_line(df)
+    if status_line:
+        known = df[df["trial_status"].isin(["good", "bad"])]
+        result["trials_good"] = int((known["trial_status"] == "good").sum())
+        result["trials_bad"] = int((known["trial_status"] == "bad").sum())
+        result["trial_status_line"] = status_line
     return result
 
 
@@ -872,9 +1081,12 @@ def _plot_success_panel(ax, df: pd.DataFrame, label: str) -> None:
         tick.set_color(outline_color)
     ax.set_ylabel("Number of trials")
     ax.set_title(
-        f"{label}\n"
-        f"{stats['successes']}/{stats['total']} correct "
-        f"({stats['success_pct']:.1f}%)"
+        _with_trial_status(
+            f"{label}\n"
+            f"{stats['successes']}/{stats['total']} correct "
+            f"({stats['success_pct']:.1f}%)",
+            df,
+        )
     )
     ax.set_ylim(0, max(stats["total"], max_total, 1) * 1.15)
     ax.set_xlim(-0.6, len(bar_specs) - 0.4)
@@ -961,13 +1173,34 @@ def _summarize_trials_per_day(df: pd.DataFrame) -> tuple[float | None, str | Non
     return median, f"Med/day: {median:.1f} trials"
 
 
+def _day_shading_legend_entry() -> tuple[Patch, Patch]:
+    return (
+        Patch(facecolor=DAY_SHADE_COLORS[0], edgecolor="#cccccc", linewidth=0.5),
+        Patch(facecolor=DAY_SHADE_COLORS[1], edgecolor="#cccccc", linewidth=0.5),
+    )
+
+
+def _legend_with_day_shading(
+    ax,
+    handles: list,
+    labels: list | None = None,
+    **kwargs,
+) -> None:
+    day_entry = _day_shading_legend_entry()
+    ax.legend(
+        handles=handles + [day_entry],
+        labels=(labels or []) + ["Days"],
+        handler_map={day_entry: HandlerTuple(ndivide=None, pad=0.4)},
+        **kwargs,
+    )
+
+
 def _shade_trial_days(ax, df: pd.DataFrame) -> None:
-    day_shades = ("#eef2f7", "#ffffff")
     for day_idx, (day, x_start, x_end) in enumerate(_trial_day_spans(df)):
         ax.axvspan(
             x_start - 0.5,
             x_end + 0.5,
-            color=day_shades[day_idx % 2],
+            color=DAY_SHADE_COLORS[day_idx % 2],
             zorder=0,
             transform=ax.get_xaxis_transform(),
         )
@@ -990,7 +1223,13 @@ def _learning_curve_side_color(side: str) -> str:
     return FEEDER_SIDE_UNKNOWN_COLOR
 
 
-def _plot_learning_curve_outcomes(ax, df: pd.DataFrame, outcome_y: float) -> list[Line2D]:
+LEARNING_CURVE_LEFT_RASTER_Y = 1.06
+LEARNING_CURVE_RIGHT_RASTER_Y = 0.98
+LEARNING_CURVE_RASTER_TICK_HALF = 0.032
+LEARNING_CURVE_RASTER_YLIM = (0, 1.15)
+
+
+def _plot_learning_curve_raster(ax, df: pd.DataFrame) -> list[Line2D]:
     plot_df = df.copy()
     plot_df["chosen_side"] = [
         _trial_chosen_side(feeder, zone)
@@ -998,71 +1237,82 @@ def _plot_learning_curve_outcomes(ax, df: pd.DataFrame, outcome_y: float) -> lis
     ]
 
     legend_handles: list[Line2D] = []
-    series = [
-        ("left", True, "Left · correct"),
-        ("left", False, "Left · incorrect"),
-        ("right", True, "Right · correct"),
-        ("right", False, "Right · incorrect"),
-        ("unknown", True, "Unknown · correct"),
-        ("unknown", False, "Unknown · incorrect"),
+    side_rows = {
+        "left": LEARNING_CURVE_LEFT_RASTER_Y,
+        "right": LEARNING_CURVE_RIGHT_RASTER_Y,
+    }
+    style_specs = [
+        (True, "-", 1.0, 0.9, "correct"),
+        (False, (0, (1, 1.2)), 0.75, 0.55, "incorrect"),
     ]
-    for side, success, label in series:
-        mask = (plot_df["chosen_side"] == side) & (plot_df["success"] == success)
-        if not mask.any():
-            continue
+    legend_added: set[tuple[str, bool]] = set()
 
-        xs = plot_df.loc[mask, "global_idx"]
-        ys = [outcome_y] * len(xs)
+    for side, y_row in side_rows.items():
         color = _learning_curve_side_color(side)
-        if success:
-            ax.plot(
+        for success, linestyle, linewidth, alpha, outcome_label in style_specs:
+            mask = (plot_df["chosen_side"] == side) & (plot_df["success"] == success)
+            if not mask.any():
+                continue
+
+            xs = plot_df.loc[mask, "global_idx"]
+            ax.vlines(
                 xs,
-                ys,
-                "o",
-                color=color,
-                markerfacecolor=color,
-                markeredgecolor=color,
-                markersize=6,
-                linestyle="none",
+                y_row - LEARNING_CURVE_RASTER_TICK_HALF,
+                y_row + LEARNING_CURVE_RASTER_TICK_HALF,
+                colors=color,
+                linewidth=linewidth,
+                linestyles=linestyle,
+                alpha=alpha,
                 zorder=3,
             )
-            legend_handles.append(
-                Line2D(
-                    [0],
-                    [0],
-                    marker="o",
-                    color="w",
-                    markerfacecolor=color,
-                    markeredgecolor=color,
-                    markersize=8,
-                    label=label,
+            legend_key = (side, success)
+            if legend_key not in legend_added:
+                legend_handles.append(
+                    Line2D(
+                        [0],
+                        [0],
+                        color=color,
+                        linewidth=2,
+                        linestyle=linestyle,
+                        alpha=max(alpha, 0.75),
+                        label=f"{side.title()} · {outcome_label}",
+                    )
                 )
+                legend_added.add(legend_key)
+
+    unknown_mask = plot_df["chosen_side"] == "unknown"
+    if unknown_mask.any():
+        y_row = (LEARNING_CURVE_LEFT_RASTER_Y + LEARNING_CURVE_RIGHT_RASTER_Y) / 2
+        xs = plot_df.loc[unknown_mask, "global_idx"]
+        ax.vlines(
+            xs,
+            y_row - LEARNING_CURVE_RASTER_TICK_HALF,
+            y_row + LEARNING_CURVE_RASTER_TICK_HALF,
+            colors=FEEDER_SIDE_UNKNOWN_COLOR,
+            linewidth=0.8,
+            linestyles=(0, (1, 1)),
+            alpha=0.7,
+            zorder=3,
+        )
+        legend_handles.append(
+            Line2D(
+                [0],
+                [0],
+                color=FEEDER_SIDE_UNKNOWN_COLOR,
+                linewidth=2,
+                linestyle=(0, (1, 1)),
+                label="Unknown side",
             )
-        else:
-            ax.plot(
-                xs,
-                ys,
-                "x",
-                color=color,
-                markeredgewidth=1.2,
-                markersize=6,
-                linestyle="none",
-                zorder=3,
-            )
-            legend_handles.append(
-                Line2D(
-                    [0],
-                    [0],
-                    marker="x",
-                    color=color,
-                    markeredgewidth=1.2,
-                    markersize=8,
-                    linestyle="None",
-                    label=label,
-                )
-            )
+        )
 
     return legend_handles
+
+
+def _learning_curve_raster_yticks() -> tuple[list[float], list[str]]:
+    return (
+        [LEARNING_CURVE_RIGHT_RASTER_Y, LEARNING_CURVE_LEFT_RASTER_Y],
+        ["Right", "Left"],
+    )
 
 
 def _plot_learning_curve_panel(ax, df: pd.DataFrame, label: str) -> None:
@@ -1079,11 +1329,8 @@ def _plot_learning_curve_panel(ax, df: pd.DataFrame, label: str) -> None:
         ax.set_axis_off()
         return
 
-    x = df["global_idx"]
     _shade_trial_days(ax, df)
-    outcome_y = 1.05
-    outcome_handles = _plot_learning_curve_outcomes(ax, df, outcome_y)
-    cumulative = df["success"].expanding().mean() * 100
+    outcome_handles = _plot_learning_curve_raster(ax, df)
     trend_x, rolling_pct, trend_window = _rolling_success_rate_trend(df)
     recent_pct = float(rolling_pct.iloc[-1]) if not rolling_pct.empty else stats["success_pct"]
     _avg_trials_per_day, trials_per_day_label = _summarize_trials_per_day(df)
@@ -1095,25 +1342,15 @@ def _plot_learning_curve_panel(ax, df: pd.DataFrame, label: str) -> None:
         stats_lines.append(trials_per_day_label)
     ax_pct = ax.twinx()
     ax_pct.plot(
-        x,
-        cumulative,
-        color="#1f77b4",
-        marker="o",
-        markersize=4,
-        linewidth=1.5,
-        label="Running success %",
-        zorder=4,
-    )
-    ax_pct.plot(
         trend_x,
         rolling_pct,
         color="#d94801",
         linewidth=3,
         solid_capstyle="round",
-        label=f"Trend (rolling success, n={trend_window})",
+        label=f"Trend (centered rolling success, n={trend_window})",
         zorder=5,
     )
-    ax_pct.set_ylabel("Running success (%)")
+    ax_pct.set_ylabel("Success (%)")
     ax_pct.set_ylim(0, 105)
     ax_pct.axhline(stats["success_pct"], color="#555555", linestyle="--", linewidth=1)
     ax_pct.text(
@@ -1129,15 +1366,18 @@ def _plot_learning_curve_panel(ax, df: pd.DataFrame, label: str) -> None:
         zorder=6,
     )
     ax.set_xlabel("Trial index (chronological)")
-    ax.set_ylabel("Outcome (side + correctness)")
-    ax.set_yticks([0, 1])
-    ax.set_yticklabels(["", ""])
-    ax.set_title(f"{label}: per-trial side, outcome, and running success rate")
-    ax.set_ylim(0, 1.2)
+    yticks, yticklabels = _learning_curve_raster_yticks()
+    ax.set_ylabel("Side chosen")
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(yticklabels, fontsize=7)
+    ax.set_title(_with_trial_status(f"{label}: per-trial outcomes and success trend", df))
+    ax.set_ylim(LEARNING_CURVE_RASTER_YLIM)
     if outcome_handles:
-        line_handles, _line_labels = ax_pct.get_legend_handles_labels()
-        ax.legend(
+        line_handles, line_labels = ax_pct.get_legend_handles_labels()
+        _legend_with_day_shading(
+            ax,
             handles=outcome_handles + line_handles,
+            labels=[handle.get_label() for handle in outcome_handles] + line_labels,
             loc="lower right",
             fontsize=7,
             framealpha=0.9,
@@ -1169,7 +1409,7 @@ def _plot_feeder_panel(ax, df: pd.DataFrame, label: str) -> None:
         zorder=2,
     )
     ax.set_ylabel("Trials per side")
-    ax.set_title(f"{label}: success rate by side chosen")
+    ax.set_title(_with_trial_status(f"{label}: success rate by side chosen", df))
     ymax = max(max(totals, default=0), max(successes, default=0), 1) * 1.15
     ax.set_ylim(0, ymax)
     for bar, success, total in zip(success_bars, successes, totals):
@@ -1245,7 +1485,7 @@ def _plot_a_to_b_panel(ax, df: pd.DataFrame, label: str) -> None:
         color="#d94801",
         linewidth=3,
         solid_capstyle="round",
-        label=f"Trend (rolling median, n={trend_window})",
+        label=f"Trend (centered rolling median, n={trend_window})",
         zorder=5,
     )
     timing = summarize_a_to_b_time(df)
@@ -1265,7 +1505,7 @@ def _plot_a_to_b_panel(ax, df: pd.DataFrame, label: str) -> None:
     )
     ax.set_xlabel("Trial index (chronological)")
     ax.set_ylabel("Seconds")
-    ax.set_title(f"{label}: A→B travel time per trial")
+    ax.set_title(_with_trial_status(f"{label}: A→B travel time per trial", df))
     ax.set_ylim(0, A_TO_B_YLIM_SECONDS)
     from matplotlib.patches import Patch
 
@@ -1278,9 +1518,11 @@ def _plot_a_to_b_panel(ax, df: pd.DataFrame, label: str) -> None:
             Patch(facecolor=FEEDER_SIDE_UNKNOWN_COLOR, label="Unknown side")
         )
     line_handles, line_labels = ax.get_legend_handles_labels()
-    ax.legend(
+    side_labels = [handle.get_label() for handle in side_handles]
+    _legend_with_day_shading(
+        ax,
         handles=side_handles + line_handles,
-        labels=[handle.get_label() for handle in side_handles] + line_labels,
+        labels=side_labels + line_labels,
         loc="upper right",
         fontsize=9,
     )
@@ -1357,6 +1599,7 @@ def figure_to_png_bytes(fig: plt.Figure) -> bytes:
 def prepare_bulk_plot_data(
     paths: list[Path],
     bulk_name: str | None = None,
+    trial_range: str | None = None,
 ) -> tuple[dict[str, pd.DataFrame], dict[str, pd.DataFrame], str, dict]:
     datasets, csv_datasets = load_all_datasets(paths)
     if not datasets:
@@ -1367,15 +1610,20 @@ def prepare_bulk_plot_data(
     if combined.empty:
         raise ValueError("No trial outcomes found across the selected files")
 
+    parsed_range = parse_trial_range(trial_range)
+    combined = apply_trial_range(combined, parsed_range)
+
     plot_datasets = {combined_label: combined}
     plot_csv: dict[str, pd.DataFrame] = {}
     if csv_datasets:
         csv_combined = combine_datasets(csv_datasets)
         if not csv_combined.empty:
-            plot_csv[combined_label] = csv_combined
+            plot_csv[combined_label] = apply_trial_range(csv_combined, parsed_range)
 
     stats = build_stats_summary(combined, plot_csv.get(combined_label))
     stats["sessions"] = list(datasets.keys())
+    stats["trial_range"] = parsed_range
+    stats["trials_used"] = len(combined)
     stats["warnings"] = [
         f"No point-B trials in {label}" for label, df in datasets.items() if df.empty
     ]
@@ -1386,9 +1634,10 @@ def run_analysis_api(
     panel: str,
     paths: list[Path],
     bulk_name: str = "analysis",
+    trial_range: str | None = None,
 ) -> tuple[bytes, dict]:
     plot_datasets, plot_csv, combined_label, stats = prepare_bulk_plot_data(
-        paths, bulk_name=bulk_name
+        paths, bulk_name=bulk_name, trial_range=trial_range
     )
     df = plot_datasets[combined_label]
     csv_df = plot_csv.get(combined_label)
@@ -1523,6 +1772,7 @@ def run_analysis(
     bulk_name: str | None = None,
     show_per_file: bool = True,
     panel: str = "all",
+    trial_range: str | None = None,
 ) -> None:
     if not datasets:
         raise ValueError("No datasets to analyze")
@@ -1545,6 +1795,18 @@ def run_analysis(
         plot_datasets = datasets
         plot_csv = csv_datasets
         combined_label = None
+
+    parsed_range = parse_trial_range(trial_range)
+    if parsed_range:
+        plot_datasets = {
+            label: apply_trial_range(df, parsed_range)
+            for label, df in plot_datasets.items()
+        }
+        plot_csv = {
+            label: apply_trial_range(df, parsed_range)
+            for label, df in plot_csv.items()
+            if label in plot_datasets
+        }
 
     if show_per_file and bulk:
         print_summary(datasets, combined_label=combined_label)
@@ -1609,6 +1871,15 @@ def main() -> None:
         type=str,
         default=None,
         help="Label for combined bulk output (default: 'combined (N files)')",
+    )
+    parser.add_argument(
+        "--trial-range",
+        type=str,
+        default=None,
+        help=(
+            "Optional trial subset: '50' (first 50), '0:50' or '1:50' (global_idx 1-50), "
+            "'120:170' (global_idx range inclusive)"
+        ),
     )
     parser.add_argument(
         "--no-recursive",
@@ -1705,6 +1976,7 @@ def main() -> None:
         bulk=args.bulk,
         bulk_name=args.bulk_name,
         panel=args.panel,
+        trial_range=args.trial_range,
     )
 
 

@@ -3,6 +3,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { useSelector } from 'react-redux';
 
 import { StreamGroupView } from './stream_view.js';
+import { LocationView } from './location_view.js';
 import { ExperimentView } from './experiment_view.js';
 import { StateView } from './state_view.js';
 import { LogView } from './log_view.js';
@@ -22,6 +23,7 @@ import { getApiUrl } from '../api.js';
 
 const TABS = [
     { id: 'main', label: 'Main', icon: 'video' },
+    { id: 'location', label: 'Location', icon: 'location-dot' },
     { id: 'control', label: 'Control', icon: 'sliders' },
 ];
 
@@ -107,6 +109,9 @@ export const PhoneMainView = () => {
                             <StateView />
                         </div>
                     </div>
+                )}
+                {tab === 'location' && (
+                    <LocationView stacked />
                 )}
                 {tab === 'control' && (
                     <div className="h-full flex flex-col overflow-hidden">

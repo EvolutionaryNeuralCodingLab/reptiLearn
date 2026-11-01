@@ -38,5 +38,13 @@
     }
   },
   "skip_serial_numbers": ["0"],
-  "expected_boards": ["magnets", "feeders", "doors", "magnetometer"]
+  "expected_boards": ["magnets", "feeders", "doors", "magnetometer"],
+  "magnet": {
+    "forward_min_uT": 90,
+    "reverse_max_uT": 20,
+    "min_pass_fraction": 0.6666666666666666,
+    "settle_sec": 5,
+    "pair_window_sec": 3,
+    "alert_min_samples": 1
+  }
 }

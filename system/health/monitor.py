@@ -490,6 +490,7 @@ def _session_watch_files(data_dir: Path) -> list[Path]:
     files = [data_dir / name for name in names if (data_dir / name).exists()]
     files.extend(sorted(data_dir.glob("*.mp4")))
     files.extend(sorted(p for p in data_dir.glob("*.csv") if p.name != "events.csv"))
+    files.extend(sorted(p for p in data_dir.glob("*.parquet") if p.is_file()))
     return files
 
 
@@ -856,6 +857,46 @@ def check_arduino_id(cfg: dict, current_boards: dict, persist: bool = True) -> d
     return result("arduino_id", True, "ok", "Arduino USB serials match inventory", details)
 
 
+def check_magnet(cfg: dict, hb: dict | None) -> dict:
+    """Fail as soon as the open magnet command disagrees with the field.
+
+    One scored sample is enough. A passing sample stays quiet; a failing
+    sample, a missing ack, or a mismatched publish is reported immediately.
+    """
+    running = bool(hb and hb.get("is_running"))
+    data_dir = str((hb or {}).get("data_dir") or "")
+    if not running or not data_dir:
+        return skip("magnet", "no experiment running", {"data_dir": data_dir})
+
+    try:
+        from experiments.trial_status import load_thresholds, score_current_command
+
+        verdict = score_current_command(Path(data_dir), load_thresholds())
+    except Exception as exc:
+        return result(
+            "magnet",
+            True,
+            "warn",
+            f"magnet check error: {exc}",
+            {"data_dir": data_dir},
+        )
+
+    if verdict is None:
+        return skip("magnet", "magnets not commanded on", {"data_dir": data_dir})
+
+    detail = verdict.get("detail") or ""
+    reasons = verdict.get("reasons") or []
+    summary = detail or "magnet field matches the command"
+    if reasons and detail:
+        summary = f"{', '.join(reasons)}: {detail}"
+    elif reasons:
+        summary = ", ".join(reasons)
+    details = {"data_dir": data_dir, **verdict}
+    if verdict.get("status") == "bad":
+        return result("magnet", False, "fail", summary, details)
+    return result("magnet", True, "ok", summary, details)
+
+
 def run_checks(cfg: dict, persist: bool = True) -> list[dict]:
     state, state_error = fetch_state(cfg)
     hb = load_heartbeat(cfg)
@@ -870,6 +911,7 @@ def run_checks(cfg: dict, persist: bool = True) -> list[dict]:
     arduino_result, current_boards = check_arduino(cfg)
     checks.append(arduino_result)
     checks.append(check_arduino_id(cfg, current_boards, persist=persist))
+    checks.append(check_magnet(cfg, hb))
     return checks
 
 

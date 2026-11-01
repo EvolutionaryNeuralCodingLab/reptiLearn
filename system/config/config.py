@@ -124,7 +124,7 @@ arena = {
     # Set this to False if you don't want to run the arena controller together with the system
     "run_controller": True,
 
-    # Uncomment the following lines to log values from the specified arena interfaces to a database table.
+    # Uncomment the following lines to log values from the magnetometer interface to a database table.
     # "data_log": {  # requires a database connection
     #     "table_name": "arena",
     #     "columns": [
@@ -141,10 +141,10 @@ arena = {
         "interface": "Magnetic Sensor",
         "image_sources": ["top"],
         "position": "top",
-        # Grayscale stream: 0–255 scalar, or BGR [B,G,R] (auto-converted to brightness).
-        # [0, 255, 255] ≈ bright yellow; [0, 0, 255] ≈ bright red; 255 = white.
-        "color": [0, 255, 0],
-        "font_scale": 2,
+        # Grayscale stream: 0–255 scalar (0 = black, 255 = white), or BGR [B,G,R].
+        "color": 0,
+        "font_scale": 1.5,
+        "margin": 20,
     },  # set enabled: False if no magnetometer is configured
 
     "command_topic": "arena_command",  # Arena commands will be published to this MQTT topic

@@ -88,7 +88,9 @@ class MagneticFieldOverlay(ConfigurableOverlay):
                 float(reading[3]),
             )
             lines = [
-                f"X: {x_uT:.1f} uT  Y: {y_uT:.1f} uT  Z: {z_uT:.1f} uT",
+                f"X: {x_uT:.1f} uT",
+                f"Y: {y_uT:.1f} uT",
+                f"Z: {z_uT:.1f} uT",
                 f"|B|: {b_uT:.1f} uT",
             ]
 

@@ -81,9 +81,12 @@ def run_magnetoreception_analysis(
     scope: str,
     session_ids: list[str] | None = None,
     bulk_name: str = "analysis",
+    trial_range: str | None = None,
 ) -> tuple[bytes, dict]:
     paths = resolve_analysis_paths(scope, session_ids)
-    return amt.run_analysis_api(panel, paths, bulk_name=bulk_name)
+    return amt.run_analysis_api(
+        panel, paths, bulk_name=bulk_name, trial_range=trial_range
+    )
 
 
 def export_analysis_figures(output_dir: str, figures: list[dict]) -> dict:

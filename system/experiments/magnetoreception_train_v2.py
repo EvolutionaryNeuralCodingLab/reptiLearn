@@ -13,6 +13,12 @@ from health.heartbeat import (
     note_bbox_listener_attached,
     note_zone_event,
 )
+from experiments.magnetometer_log import MagnetometerCsvLog
+from experiments.trial_status import (
+    commit_trial_status,
+    refresh_open_trial,
+    restore_open_trial,
+)
 from image_observers.yolo_bbox_detector import BBoxDataCollector
 
 
@@ -113,6 +119,13 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
         ("success_left_count", 0),
         ("trial_schedule", None),
         ("schedule_seed", None),
+        ("trial_status", None),
+        ("trial_status_reasons", None),
+        ("trial_status_detail", None),
+        ("last_trial_status", None),
+        ("last_trial_status_trial", None),
+        ("last_trial_status_reasons", None),
+        ("last_trial_status_detail", None),
     )
 
     def _state_key(self, name):
@@ -140,6 +153,8 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
         self.smoothed_centroid = None
         self._a_start_scheduled = False
 
+        self.trial_started_at = None
+        self._trial_status_written = False
         self._restore_state()
 
         self.actions["Reset Baseline"] = {"run": self.set_baseline}
@@ -156,6 +171,10 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
         self.actions["Close Back Doors"] = {"run": self.close_back_doors}
         self.actions["Restart Cycle"] = {"run": self.restart_cycle}
 
+        # Log from magnets-on at A (a_delay) through C, not while waiting at A.
+        self.magnetometer_log = MagnetometerCsvLog(
+            self, active_phases=("a_delay", "b", "b_wait", "c")
+        )
         self._sync_session_state()
 
     def _total_trials(self):
@@ -216,7 +235,14 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
     def _magnet_direction_for_trial(self, trial_num):
         return self.trial_schedule[trial_num - 1]
 
+    def on_magnetometer_sample(self):
+        refresh_open_trial(self)
+
+    def _commit_trial_status(self):
+        commit_trial_status(self)
+
     def _complete_block(self):
+        self._commit_trial_status()
         total = self._total_trials()
         self.log.info(f"Block complete: {total} trials finished")
         self._log_event(
@@ -334,6 +360,7 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
                 {"trial": self.trial_num},
             )
 
+        restore_open_trial(self)
         self._prepare_experiment_resume()
         self._start_bbox_listener()
 
@@ -369,8 +396,10 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
         self._cancel_phase_schedule()
         self._cleanup_bbox()
         self._sync_session_state()
+        self.magnetometer_log.stop()
 
     def release(self):
+        self.magnetometer_log.stop()
         self._cleanup_bbox()
 
     def restart_cycle(self):
@@ -406,6 +435,8 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
     def _sync_session_state(self):
         for name, _default in self._SESSION_FIELDS:
             session_state[self._state_key(name)] = getattr(self, name)
+        if getattr(self, "magnetometer_log", None) is not None:
+            self.magnetometer_log.sync()
 
     def _cancel_phase_schedule(self):
         try:
@@ -582,6 +613,11 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
         self.reward_dispensed = False
         self.c_entry_handled = False
         self.trial_num += 1
+        self.trial_started_at = time.time()
+        self._trial_status_written = False
+        self.trial_status = "good"
+        self.trial_status_reasons = []
+        self.trial_status_detail = ""
         self.magnet_direction = self._magnet_direction_for_trial(self.trial_num)
         if self.magnet_direction == "forward":
             self.cycle_side = "right"
@@ -836,6 +872,7 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
                 {"trial": self.trial_num},
             )
 
+        self._commit_trial_status()
         if self.trial_num >= self._total_trials():
             self._complete_block()
             return False

@@ -278,14 +278,32 @@ export const api = {
         },
     },
 
+    location: {
+        live() {
+            return requestJSON("/location/live");
+        },
+        track(session, at) {
+            const parts = [];
+            if (session) parts.push(`session=${encodeURIComponent(session)}`);
+            if (Number.isFinite(at)) parts.push(`at=${encodeURIComponent(at)}`);
+            if (!parts.length) return requestJSON("/location/track");
+            return requestJSON("/location/track", parts.join("&"));
+        },
+    },
+
     analysis: {
-        magnetoreception(panel, { scope = "current", sessionIds = [], bulkName = "analysis" } = {}) {
-            return requestJSON("/analysis/magnetoreception", null, "POST", {
+        magnetoreception(panel, { scope = "current", sessionIds = [], bulkName = "analysis", trialRange = "" } = {}) {
+            const body = {
                 panel,
                 scope,
                 session_ids: sessionIds,
                 bulk_name: bulkName,
-            }, true);
+            };
+            const trimmedRange = String(trialRange || "").trim();
+            if (trimmedRange) {
+                body.trial_range = trimmedRange;
+            }
+            return requestJSON("/analysis/magnetoreception", null, "POST", body, true);
         },
         exportFigures(outputDir, figures) {
             return requestJSON("/analysis/export_figures", null, "POST", {

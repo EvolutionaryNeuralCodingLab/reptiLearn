@@ -281,18 +281,13 @@ class BBoxDataCollector:
             # NOTE: assuming this runs on the main process
             self.remove_listener = self.obs.add_listener(listener, exp.state)
 
-        n_out = int(np.asarray(self.obs.output).size)
-        kp_pairs = max(0, (n_out - 5) // 2)
-
         columns = self._logger_columns(self.obs)
-        # Keeps bbox-only logs on bbox_position; pose-sized buffers use a wider hypertable.
-        db_table_name = "bbox_pose" if kp_pairs > 0 else "bbox_position"
-
+        # CSV only. Postgres bbox hypertables filled the disk; analysis reads these files.
         self.bbox_log = data_log.ObserverLogger(
             self.obs,
             columns=columns,
             csv_path=exp.session_state["data_dir"] / (self.obs_id + ".csv"),
-            db_table_name=db_table_name,
+            db_table_name=None,
             split_csv=True,
         )
         self.bbox_log.start()

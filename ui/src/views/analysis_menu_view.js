@@ -3,6 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { api } from '../api.js';
 import { SocketContext } from '../socket.js';
 import RLMenu from './ui/menu.js';
+import RLInput from './ui/input.js';
 import { AnalysisSessionPickerView } from './analysis_session_picker_view.js';
 import { AnalysisExportModal } from './analysis_export_modal.js';
 import { cacheAnalysisFigure, pruneStaleAnalysisFigures, setAnalysisFigureVisible } from '../store/reptilearn_slice.js';
@@ -23,16 +24,20 @@ const SCOPES = [
 ];
 
 const ERROR_TOAST_MS = 5000;
-export const ANALYSIS_FIGURE_VERSION = 14;
+export const ANALYSIS_FIGURE_VERSION = 17;
 
 const scopeLabel = (scopeKey) => SCOPES.find((scope) => scope.key === scopeKey)?.label || scopeKey;
 
-const buildCacheKey = (panel, scope, sessionIds = []) => {
+const buildCacheKey = (panel, scope, sessionIds = [], trialRange = "") => {
     let base;
     if (scope === "selected") {
         base = `${panel}:selected:${[...sessionIds].sort().join(",")}`;
     } else {
         base = `${panel}:${scope}`;
+    }
+    const trimmedRange = String(trialRange || "").trim();
+    if (trimmedRange) {
+        base = `${base}:trials=${trimmedRange}`;
     }
     return `v${ANALYSIS_FIGURE_VERSION}:${base}`;
 };
@@ -60,6 +65,7 @@ export const AnalysisMenuView = () => {
     const [error, setError] = React.useState(null);
     const [openPicker, setOpenPicker] = React.useState(false);
     const [exportOpen, setExportOpen] = React.useState(false);
+    const [trialRange, setTrialRange] = React.useState("");
 
     React.useEffect(() => {
         dispatch(pruneStaleAnalysisFigures(ANALYSIS_FIGURE_VERSION));
@@ -88,13 +94,26 @@ export const AnalysisMenuView = () => {
                 scope,
                 sessionIds,
                 bulkName,
+                trialRange,
             });
             if (result.error) {
                 throw new Error(result.error);
             }
 
-            const cacheKey = buildCacheKey(panel, scope, sessionIds);
+            const cacheKey = buildCacheKey(panel, scope, sessionIds, trialRange);
             const panelLabel = result.stats?.panel_label || panel;
+            const trimmedTrialRange = String(trialRange || "").trim();
+            const scopeSubtitle = scope === "selected"
+                ? `${scopeLabel(scope)}: ${sessionIds.join(", ")}`
+                : scopeLabel(scope);
+            const statusLine = result.stats?.trial_status_line;
+            const subtitleParts = [scopeSubtitle];
+            if (trimmedTrialRange) {
+                subtitleParts.push(`trials ${trimmedTrialRange}`);
+            }
+            if (statusLine) {
+                subtitleParts.push(statusLine);
+            }
             const figure = {
                 id: `${cacheKey}:${Date.now()}`,
                 cacheKey,
@@ -102,10 +121,9 @@ export const AnalysisMenuView = () => {
                 scope,
                 sessionIds: [...sessionIds],
                 bulkName,
+                trialRange: trimmedTrialRange,
                 title: result.stats?.label || `${panelLabel} · ${bulkName}`,
-                subtitle: scope === "selected"
-                    ? `${scopeLabel(scope)}: ${sessionIds.join(", ")}`
-                    : scopeLabel(scope),
+                subtitle: subtitleParts.join(" · "),
                 imageDataUrl: `data:image/png;base64,${result.image}`,
                 stats: result.stats,
                 isVisible: true,
@@ -155,6 +173,22 @@ export const AnalysisMenuView = () => {
                     {selectedSessionIds.length
                         ? `${selectedSessionIds.length} session(s) selected`
                         : "No sessions selected"}
+                </RLMenu.StaticItem>
+                <RLMenu.SeparatorItem />
+                <RLMenu.StaticItem>
+                    <div
+                        className="flex flex-col gap-1"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                    >
+                        <span className="text-xs text-slate-600">Trial range (optional)</span>
+                        <RLInput.Text
+                            value={trialRange}
+                            onChange={(event) => setTrialRange(event.target.value)}
+                            placeholder="all · 50 · 120:170"
+                            disabled={isRunning}
+                        />
+                    </div>
                 </RLMenu.StaticItem>
                 <RLMenu.SeparatorItem />
 

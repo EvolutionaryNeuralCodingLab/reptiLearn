@@ -17,6 +17,7 @@ import json
 import bbox
 import cv2
 import logging
+from bbox_logs import prefer_parquet
 events_log_filename = "events.csv"
 session_state_filename = "session_state.json"
 name_locale = "Asia/Jerusalem"
@@ -38,14 +39,18 @@ def split_name_datetime(s):
 
 def read_timeseries_csv(path: Path, time_col="time", tz="utc") -> pd.DataFrame:
     """
-    Read csv file into a pandas DataFrame. Creates a DatetimeIndex and sets
-    the timezone to the specified one.
+    Read a CSV or Parquet time series into a DataFrame. Creates a DatetimeIndex
+    and sets the timezone to the specified one.
 
-    - path: csv file path
+    - path: csv or parquet file path
     - time_col: The name of the column to be used as a DatetimeIndex
     - tz: The timezone of the time column (see DatetimeIndex.tz_localize)
     """
-    df = pd.read_csv(path)
+    path = Path(path)
+    if path.suffix == ".parquet":
+        df = pd.read_parquet(path)
+    else:
+        df = pd.read_csv(path)
 
     if hasattr(time_col, "__getitem__"):
         for col in time_col:
@@ -405,6 +410,10 @@ class SessionInfo:
             else:
                 self.csvs.append(csv_path)
 
+        self.observer_logs = prefer_parquet(
+            list(self.csvs) + [p for p in session_dir.glob("*.parquet") if p.is_file()]
+        )
+
         self.images = list(session_dir.glob("*.jpg")) + list(session_dir.glob("*.png")) + list(session_dir.glob("*.pickle"))
 
         self.session_state_path = session_dir / "session_state.json"
@@ -530,13 +539,14 @@ class SessionInfo:
         if self._head_bbox is not None:
             return self._head_bbox
 
-        bbox_csvs = sorted([p for p in self.csvs if "head_bbox" in p.name])
+        source = self.observer_logs if self.observer_logs else self.csvs
+        bbox_paths = sorted(p for p in source if "head_bbox" in p.name)
 
-        if len(bbox_csvs) == 0:
+        if len(bbox_paths) == 0:
             return None
 
         self._head_bbox = pd.concat(
-            [read_timeseries_csv(bbox_csv) for bbox_csv in bbox_csvs], axis=0
+            [read_timeseries_csv(bbox_path) for bbox_path in bbox_paths], axis=0
         )
         self._head_bbox = self._head_bbox[~self._head_bbox.index.duplicated()]
         return self._head_bbox
@@ -549,3 +559,15 @@ class SessionInfo:
         df.index = head_bbox.index
         df["confidence"] = head_bbox.confidence
         return df
+
+    def load_bbox(self, obs_id: str = "1") -> pd.DataFrame | None:
+        """Load one observer's bbox/pose chunks (CSV or Parquet), ordered by time."""
+        from bbox_logs import bbox_log_paths
+
+        paths = bbox_log_paths(self.dir, obs_id)
+        if not paths:
+            return None
+        frames = [read_timeseries_csv(path) for path in paths]
+        df = pd.concat(frames, axis=0)
+        df = df[~df.index.duplicated()]
+        return df.sort_index()

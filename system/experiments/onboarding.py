@@ -9,6 +9,7 @@ from health.heartbeat import (
     note_bbox_listener_attached,
     note_zone_event,
 )
+from experiments.magnetometer_log import MagnetometerCsvLog
 from image_observers.yolo_bbox_detector import BBoxDataCollector
 
 
@@ -77,6 +78,11 @@ class MagnetoreceptionOnboarding(exp.Experiment):
         self.actions["Close Back Doors"] = {"run": self.close_back_doors}
         self.actions["Restart Cycle"] = {"run": self.restart_cycle}
 
+        # Same window as the v2 experiments: the loop after leaving A, not the wait at A.
+        # This protocol has no magnets of its own; the file still records the field during B–D.
+        self.magnetometer_log = MagnetometerCsvLog(
+            self, active_phases=("b", "c", "d")
+        )
         self._sync_session_state()
 
 
@@ -145,8 +151,10 @@ class MagnetoreceptionOnboarding(exp.Experiment):
         )
         self._cleanup_bbox()
         self._sync_session_state()
+        self.magnetometer_log.stop()
 
     def release(self):
+        self.magnetometer_log.stop()
         self._cleanup_bbox()
 
     def restart_cycle(self):
@@ -175,6 +183,8 @@ class MagnetoreceptionOnboarding(exp.Experiment):
         session_state["onboarding_c_side"] = self.c_side
         session_state["onboarding_c_entry_handled"] = self.c_entry_handled
         session_state["onboarding_d_entry_handled"] = self.d_entry_handled
+        if getattr(self, "magnetometer_log", None) is not None:
+            self.magnetometer_log.sync()
 
     def _log_event(self, event, value=None):
         if exp.event_logger is not None:

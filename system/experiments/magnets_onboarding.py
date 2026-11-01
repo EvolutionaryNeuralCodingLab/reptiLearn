@@ -13,6 +13,12 @@ from health.heartbeat import (
     note_bbox_listener_attached,
     note_zone_event,
 )
+from experiments.magnetometer_log import MagnetometerCsvLog
+from experiments.trial_status import (
+    commit_trial_status,
+    refresh_open_trial,
+    restore_open_trial,
+)
 from image_observers.yolo_bbox_detector import BBoxDataCollector
 
 
@@ -53,9 +59,9 @@ class MagnetsOnboarding(exp.Experiment):
     random_seed: optional int; if omitted, seeded from session data_dir for
     reproducible shuffled schedules within a session.
 
-    magnetoreception/point_b is logged with the zone and magnet direction and
-    without a choice reason, so day-summary scoring skips these trials the
-    same way it skips onboarding.
+    magnetoreception/point_b is logged with the zone, magnet direction, and a
+    choice reason: correct_choice when the side matches the field (B1 after
+    forward, B2 after reverse), otherwise incorrect_side. There is no reward.
     """
 
     default_params = {
@@ -85,6 +91,13 @@ class MagnetsOnboarding(exp.Experiment):
         ("magnet_gap_end_time", None),
         ("trial_schedule", None),
         ("schedule_seed", None),
+        ("trial_status", None),
+        ("trial_status_reasons", None),
+        ("trial_status_detail", None),
+        ("last_trial_status", None),
+        ("last_trial_status_trial", None),
+        ("last_trial_status_reasons", None),
+        ("last_trial_status_detail", None),
     )
 
     def _state_key(self, name):
@@ -111,6 +124,8 @@ class MagnetsOnboarding(exp.Experiment):
         self.zone_first_seen = {}
         self.smoothed_centroid = None
         self._a_start_scheduled = False
+        self.trial_started_at = None
+        self._trial_status_written = False
 
         self._restore_state()
 
@@ -126,6 +141,10 @@ class MagnetsOnboarding(exp.Experiment):
         self.actions["Close Back Doors"] = {"run": self.close_back_doors}
         self.actions["Restart Cycle"] = {"run": self.restart_cycle}
 
+        # Trial loop after leaving A. This protocol has no phase c: B, the hold, then D.
+        self.magnetometer_log = MagnetometerCsvLog(
+            self, active_phases=("b", "b_hold", "d")
+        )
         self._sync_session_state()
 
     def _total_trials(self):
@@ -186,7 +205,14 @@ class MagnetsOnboarding(exp.Experiment):
     def _magnet_direction_for_trial(self, trial_num):
         return self.trial_schedule[trial_num - 1]
 
+    def on_magnetometer_sample(self):
+        refresh_open_trial(self)
+
+    def _commit_trial_status(self):
+        commit_trial_status(self)
+
     def _complete_block(self):
+        self._commit_trial_status()
         total = self._total_trials()
         self.log.info(f"Block complete: {total} trials finished")
         self._log_event(
@@ -280,6 +306,7 @@ class MagnetsOnboarding(exp.Experiment):
                 {"trial": self.trial_num},
             )
 
+        restore_open_trial(self)
         self._prepare_experiment_resume()
         self._start_bbox_listener()
 
@@ -322,8 +349,10 @@ class MagnetsOnboarding(exp.Experiment):
         self._cleanup_bbox()
         self.magnets_stop()
         self._sync_session_state()
+        self.magnetometer_log.stop()
 
     def release(self):
+        self.magnetometer_log.stop()
         self._cleanup_bbox()
 
     def restart_cycle(self):
@@ -354,6 +383,9 @@ class MagnetsOnboarding(exp.Experiment):
     def _sync_session_state(self):
         for name, _default in self._SESSION_FIELDS:
             session_state[self._state_key(name)] = getattr(self, name)
+        session_state["magnets_onboarding_trial"] = self.trial_num
+        if getattr(self, "magnetometer_log", None) is not None:
+            self.magnetometer_log.sync()
 
     def _cancel_phase_schedule(self):
         try:
@@ -519,6 +551,11 @@ class MagnetsOnboarding(exp.Experiment):
         self.choice_side = None
         self.d_entry_handled = False
         self.trial_num += 1
+        self.trial_started_at = time.time()
+        self._trial_status_written = False
+        self.trial_status = "good"
+        self.trial_status_reasons = []
+        self.trial_status_detail = ""
         self.magnet_direction = self._magnet_direction_for_trial(self.trial_num)
 
         self.close_left_door()
@@ -550,7 +587,9 @@ class MagnetsOnboarding(exp.Experiment):
         if self.phase != "b":
             return
 
+        expected = "B1" if self.magnet_direction == "forward" else "B2"
         self.choice_side = side
+        self.choice_correct = side == expected
         self.close_back_doors()
         hold = self._seconds("b_hold_seconds", 15)
         self.phase = "b_hold"
@@ -559,7 +598,8 @@ class MagnetsOnboarding(exp.Experiment):
 
         self.log.info(
             f"Trial {self.trial_num}: at {side}, back doors closed, "
-            f"magnets stay {self.magnet_direction} for {hold:.1f}s"
+            f"magnets stay {self.magnet_direction} for {hold:.1f}s "
+            f"({'correct' if self.choice_correct else 'incorrect'}, expected {expected})"
         )
         self._log_event(
             "magnetoreception/point_b",
@@ -567,6 +607,11 @@ class MagnetsOnboarding(exp.Experiment):
                 "trial": self.trial_num,
                 "zone": side,
                 "magnet_direction": self.magnet_direction,
+                "dispensed": False,
+                "feeder": None,
+                "reason": "correct_choice" if self.choice_correct else "incorrect_side",
+                "expected_zone": expected,
+                "choice_correct": self.choice_correct,
             },
         )
         self._schedule_phase(self._finish_b_hold, hold)
@@ -643,6 +688,7 @@ class MagnetsOnboarding(exp.Experiment):
                 {"trial": self.trial_num},
             )
 
+        self._commit_trial_status()
         if self.trial_num >= self._total_trials():
             self._complete_block()
             return False
@@ -780,6 +826,15 @@ class MagnetsOnboarding(exp.Experiment):
         arena.run_command("open", "Back Door Left", None, False)
 
     def close_left_back_door(self):
+        # #region agent log
+        try:
+            import json as _json, time as _t
+            open("/home/tal/dev/reptiLearn/.cursor/debug-4b4c4f.log", "a").write(
+                _json.dumps({"sessionId": "4b4c4f", "hypothesisId": "A", "location": "magnets_onboarding.py:close_left_back_door", "message": "close_left_back_door called", "data": {"phase": getattr(self, "phase", None), "trial": getattr(self, "trial_num", None)}, "timestamp": int(_t.time() * 1000), "runId": "door-pre"}) + "\n"
+            )
+        except Exception:
+            pass
+        # #endregion
         arena.run_command("close", "Back Door Left", None, False)
 
     def open_back_doors(self):
@@ -787,5 +842,14 @@ class MagnetsOnboarding(exp.Experiment):
         self.open_left_back_door()
 
     def close_back_doors(self):
+        # #region agent log
+        try:
+            import json as _json, time as _t
+            open("/home/tal/dev/reptiLearn/.cursor/debug-4b4c4f.log", "a").write(
+                _json.dumps({"sessionId": "4b4c4f", "hypothesisId": "A", "location": "magnets_onboarding.py:close_back_doors", "message": "close_back_doors called", "data": {"phase": getattr(self, "phase", None), "trial": getattr(self, "trial_num", None)}, "timestamp": int(_t.time() * 1000), "runId": "door-pre"}) + "\n"
+            )
+        except Exception:
+            pass
+        # #endregion
         self.close_right_back_door()
         self.close_left_back_door()
