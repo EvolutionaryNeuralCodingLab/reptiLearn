@@ -13,6 +13,7 @@ from health.heartbeat import (
     note_bbox_listener_attached,
     note_zone_event,
 )
+from experiments.psu_current_log import apply_psu_limits, ensure_psu_limit_params
 from image_observers.yolo_bbox_detector import BBoxDataCollector
 
 
@@ -70,26 +71,9 @@ class MagnetoreceptionTrainingExperiment(exp.Experiment):
     reproducible shuffled schedules within a session.
     """
 
-    default_params = {
-        "bbox_obs_id": "1",
-        "image_source_id": "top",
-        "point_a": {"location": [0.42, 0.2, 0.59, 0.72]},
-        "point_b1": {"location": [0.74, 0.05, 0.92, 0.42]},
-        "point_b2": {"location": [0.07, 0.05, 0.24, 0.42]},
-        "point_c1": {"location": [0.77, 0.42, 0.92, 0.76]},
-        "point_c2": {"location": [0.07, 0.42, 0.24, 0.76]},
-        "point_d": {"location": [0.44, 0.75, 0.57, 1]},
-        "zone_confirm_frames": 15,
-        "zone_confirm_seconds": 0.5,
-        "centroid_smoothing_alpha": 0.3,
-        "feeder_dispense_limit": 15,
-        "feeder_stop_total_limit": 30,
-        "point_c_dwell_seconds": 10,
-        "magnet_off_to_on_min_seconds": 5,
-        "trials_per_direction": 20,
-        "conflict_trials_per_side": 10,
-        "random_seed": None,
-    }
+    def get_default_params(self):
+        from experiment_config import default_params_for
+        return default_params_for("magnetoreception_train")
 
     def _restore_from_session(self, key, default):
         if key not in session_state:
@@ -174,6 +158,8 @@ class MagnetoreceptionTrainingExperiment(exp.Experiment):
         self.actions["Close Back Doors"] = {"run": self.close_back_doors}
         self.actions["Restart Cycle"] = {"run": self.restart_cycle}
 
+        ensure_psu_limit_params(self)
+        apply_psu_limits(self)
         self._sync_session_state()
 
     def _magnet_trials_per_direction(self):
@@ -348,6 +334,7 @@ class MagnetoreceptionTrainingExperiment(exp.Experiment):
                 self._finish_c_dwell()
 
     def run(self):
+        apply_psu_limits(self)
         self.log.info(
             "Starting magnetoreception training (automatic A -> B -> C -> D loop)"
         )

@@ -12,6 +12,7 @@ import { RLSpinner } from './ui/spinner.js';
 import { classNames } from './ui/common.js';
 import { RLTooltip } from './ui/tooltip.js';
 import { api } from '../api.js';
+import { MAG_PARAM_EXPERIMENTS, ParamsForm } from './params_form.js';
 
 /*
   Unused helper: assign object o to object n without overwriting existing properties of o.
@@ -44,6 +45,7 @@ export const ExperimentView = () => {
     const is_running = ctrl_state.session ? ctrl_state.session.is_running : false;
     const session = ctrl_state.session;
     const cur_block = ctrl_state?.session?.cur_block;
+    const simpleParams = MAG_PARAM_EXPERIMENTS.has(session?.experiment);
 
     const session_title = (() => {
         if (!session) return "Session";
@@ -73,13 +75,18 @@ export const ExperimentView = () => {
                     : <RLTooltip content="Run experiment"><RLButton.BarButton onClick={api.session.run} icon="play" /></RLTooltip>)
                 : null
             }
-            <div className='flex items-center px-1 h-[22px]'>Block:</div>
-            <RLInput.Text readOnly value={session.cur_block + 1} size="3" className="h-[22px]" />
-            <RLButton.BarButton onClick={api.session.next_block} icon="add" />
-            <div className='flex items-center px-1 h-[22px]'>Trial:</div>
-            <RLInput.Text readOnly value={session.cur_trial + 1} size="3" className="h-[22px]" />
-            <RLButton.BarButton onClick={api.session.next_trial} icon="add" />
-            <RLButton.BarButton onClick={api.session.reset_phase} icon="undo" className="mr-auto" />
+            {!simpleParams && (
+                <React.Fragment>
+                    <div className='flex items-center px-1 h-[22px]'>Block:</div>
+                    <RLInput.Text readOnly value={session.cur_block + 1} size="3" className="h-[22px]" />
+                    <RLButton.BarButton onClick={api.session.next_block} icon="add" />
+                    <div className='flex items-center px-1 h-[22px]'>Trial:</div>
+                    <RLInput.Text readOnly value={session.cur_trial + 1} size="3" className="h-[22px]" />
+                    <RLButton.BarButton onClick={api.session.next_trial} icon="add" />
+                    <RLButton.BarButton onClick={api.session.reset_phase} icon="undo" className="mr-auto" />
+                </React.Fragment>
+            )}
+            {simpleParams && <div className="mr-auto" />}
             {actions_view}
         </Bar>;
 
@@ -112,18 +119,31 @@ export const ExperimentView = () => {
     }));
 
 
-    const params = session && ((session?.params && session?.blocks) ? (
+    const paramsForm = session?.params && (
+        <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+            <Bar title="Parameters" colors="bg-gray-200" border="none">
+                <RLButton.BarButton onClick={api.session.params.reset} disabled={is_running} text="Reset" />
+            </Bar>
+            <ParamsForm
+                params={session.params}
+                disabled={is_running}
+                onCommit={(next) => api.session.params.update(next)}
+            />
+        </div>
+    );
+
+    const params = !session ? null : (simpleParams ? paramsForm : ((session?.params && session?.blocks) ? (
         <RLTabs
             onChange={setSelectedParamsIndex}
             selectedIndex={selectedParamsIndex}
             className="overflow-hidden mt-px"
             panelClassName="flex-col flex-1 overflow-hidden"
             tabs={[paramsTab, ...blockTabs]} />
-    ) : <RLSpinner>Loading...</RLSpinner>)
+    ) : <RLSpinner>Loading...</RLSpinner>))
 
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full min-h-0">
             <Bar title={session_title} />
             {phase_toolbar}
             {params}

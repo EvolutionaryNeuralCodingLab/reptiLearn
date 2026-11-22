@@ -14,6 +14,11 @@ from health.heartbeat import (
     note_zone_event,
 )
 from experiments.magnetometer_log import MagnetometerCsvLog
+from experiments.psu_current_log import (
+    PsuCurrentCsvLog,
+    apply_psu_limits,
+    ensure_psu_limit_params,
+)
 from experiments.trial_status import (
     commit_trial_status,
     refresh_open_trial,
@@ -64,21 +69,9 @@ class MagnetsOnboarding(exp.Experiment):
     forward, B2 after reverse), otherwise incorrect_side. There is no reward.
     """
 
-    default_params = {
-        "bbox_obs_id": "1",
-        "image_source_id": "top",
-        "point_a": {"location": [0.42, 0.45, 0.59, 0.72]},
-        "point_b1": {"location": [0.74, 0.05, 0.92, 0.42]},
-        "point_b2": {"location": [0.07, 0.05, 0.24, 0.42]},
-        "point_d": {"location": [0.44, 0.75, 0.57, 1]},
-        "zone_confirm_frames": 15,
-        "zone_confirm_seconds": 0.5,
-        "centroid_smoothing_alpha": 0.3,
-        "b_hold_seconds": 15,
-        "magnet_off_to_on_min_seconds": 5,
-        "total_trials": 50,
-        "random_seed": None,
-    }
+    def get_default_params(self):
+        from experiment_config import default_params_for
+        return default_params_for("magnets_onboarding")
 
     _SESSION_FIELDS = (
         ("phase", "a"),
@@ -145,6 +138,11 @@ class MagnetsOnboarding(exp.Experiment):
         self.magnetometer_log = MagnetometerCsvLog(
             self, active_phases=("b", "b_hold", "d")
         )
+        self.psu_current_log = PsuCurrentCsvLog(
+            self, active_phases=("b", "b_hold", "d")
+        )
+        ensure_psu_limit_params(self)
+        apply_psu_limits(self)
         self._sync_session_state()
 
     def _total_trials(self):
@@ -276,6 +274,7 @@ class MagnetsOnboarding(exp.Experiment):
         callback()
 
     def run(self):
+        apply_psu_limits(self)
         self.log.info(
             "Starting magnets onboarding (automatic A -> B -> D loop, no reward)"
         )
@@ -350,9 +349,11 @@ class MagnetsOnboarding(exp.Experiment):
         self.magnets_stop()
         self._sync_session_state()
         self.magnetometer_log.stop()
+        self.psu_current_log.stop()
 
     def release(self):
         self.magnetometer_log.stop()
+        self.psu_current_log.stop()
         self._cleanup_bbox()
 
     def restart_cycle(self):
@@ -386,6 +387,8 @@ class MagnetsOnboarding(exp.Experiment):
         session_state["magnets_onboarding_trial"] = self.trial_num
         if getattr(self, "magnetometer_log", None) is not None:
             self.magnetometer_log.sync()
+        if getattr(self, "psu_current_log", None) is not None:
+            self.psu_current_log.sync()
 
     def _cancel_phase_schedule(self):
         try:

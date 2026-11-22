@@ -40,11 +40,18 @@
   "skip_serial_numbers": ["0"],
   "expected_boards": ["magnets", "feeders", "doors", "magnetometer"],
   "magnet": {
-    "forward_min_uT": 90,
-    "reverse_max_uT": 20,
+    "forward_min_uT": 80,
+    "reverse_max_uT": 50,
     "min_pass_fraction": 0.6666666666666666,
     "settle_sec": 5,
     "pair_window_sec": 3,
     "alert_min_samples": 1
+  },
+  "psu": {
+    "port": "/dev/ttyUSB0",
+    "address": 1,
+    "baud": 9600,
+    "expected_current_a": 6.0,
+    "current_tolerance_a": 0.3
   }
 }

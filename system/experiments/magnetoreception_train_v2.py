@@ -14,6 +14,11 @@ from health.heartbeat import (
     note_zone_event,
 )
 from experiments.magnetometer_log import MagnetometerCsvLog
+from experiments.psu_current_log import (
+    PsuCurrentCsvLog,
+    apply_psu_limits,
+    ensure_psu_limit_params,
+)
 from experiments.trial_status import (
     commit_trial_status,
     refresh_open_trial,
@@ -74,26 +79,9 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
     choice, so it excludes the closed-door wait at A and the reward delay.
     """
 
-    default_params = {
-        "bbox_obs_id": "1",
-        "image_source_id": "top",
-        "point_a": {"location": [0.42, 0.2, 0.59, 0.72]},
-        "point_b1": {"location": [0.74, 0.05, 0.92, 0.42]},
-        "point_b2": {"location": [0.07, 0.05, 0.24, 0.42]},
-        "point_c": {"location": [0.44, 0.75, 0.57, 1]},
-        "zone_confirm_frames": 15,
-        "zone_confirm_seconds": 0.5,
-        "centroid_smoothing_alpha": 0.3,
-        "feeder_dispense_limit": 15,
-        "feeder_stop_total_limit": 30,
-        "a_back_doors_delay_seconds": 5,
-        "correct_reward_delay_seconds": 5,
-        "correct_post_reward_seconds": 15,
-        "incorrect_exit_delay_seconds": 5,
-        "magnet_off_to_on_min_seconds": 5,
-        "total_trials": 60,
-        "random_seed": None,
-    }
+    def get_default_params(self):
+        from experiment_config import default_params_for
+        return default_params_for("magnetoreception_train_v2")
 
     _SESSION_FIELDS = (
         ("phase", "a"),
@@ -175,6 +163,11 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
         self.magnetometer_log = MagnetometerCsvLog(
             self, active_phases=("a_delay", "b", "b_wait", "c")
         )
+        self.psu_current_log = PsuCurrentCsvLog(
+            self, active_phases=("a_delay", "b", "b_wait", "c")
+        )
+        ensure_psu_limit_params(self)
+        apply_psu_limits(self)
         self._sync_session_state()
 
     def _total_trials(self):
@@ -328,6 +321,7 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
         callback()
 
     def run(self):
+        apply_psu_limits(self)
         self.log.info(
             "Starting magnetoreception training v2 (automatic A -> B -> C loop)"
         )
@@ -397,9 +391,11 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
         self._cleanup_bbox()
         self._sync_session_state()
         self.magnetometer_log.stop()
+        self.psu_current_log.stop()
 
     def release(self):
         self.magnetometer_log.stop()
+        self.psu_current_log.stop()
         self._cleanup_bbox()
 
     def restart_cycle(self):
@@ -437,6 +433,8 @@ class MagnetoreceptionTrainingExperimentV2(exp.Experiment):
             session_state[self._state_key(name)] = getattr(self, name)
         if getattr(self, "magnetometer_log", None) is not None:
             self.magnetometer_log.sync()
+        if getattr(self, "psu_current_log", None) is not None:
+            self.psu_current_log.sync()
 
     def _cancel_phase_schedule(self):
         try:

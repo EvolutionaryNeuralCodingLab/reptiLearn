@@ -790,6 +790,17 @@ def summarize_feeder_direction(df: pd.DataFrame) -> dict:
     return {"left": left, "right": right, "unknown": unknown}
 
 
+def summarize_commanded_side(df: pd.DataFrame) -> dict[str, int]:
+    """Trials the schedule sent left (Reverse) or right (Forward)."""
+    counts = {"left": 0, "right": 0}
+    if df.empty or "magnet_direction" not in df.columns:
+        return counts
+    direction = df["magnet_direction"].fillna("").astype(str).str.strip().str.lower()
+    counts["right"] = int((direction == "forward").sum())
+    counts["left"] = int((direction == "reverse").sum())
+    return counts
+
+
 def summarize_feeder_side_counts(df: pd.DataFrame) -> dict[str, dict[str, int]]:
     empty = {
         "left": {"success": 0, "total": 0},
@@ -1384,47 +1395,93 @@ def _plot_learning_curve_panel(ax, df: pd.DataFrame, label: str) -> None:
         )
 
 
-def _plot_feeder_panel(ax, df: pd.DataFrame, label: str) -> None:
-    counts = summarize_feeder_side_counts(df)
-    side_labels = ["Left (B2)", "Right (B1)"]
-    side_keys = ["left", "right"]
-    totals = [counts[key]["total"] for key in side_keys]
-    successes = [counts[key]["success"] for key in side_keys]
-    colors = [FEEDER_SIDE_COLORS[key] for key in side_keys]
+def summarize_side_questions(df: pd.DataFrame) -> dict[str, dict[str, int]]:
+    """Counts behind the left/right bars.
 
-    ax.bar(
-        side_labels,
-        totals,
-        color=colors,
-        alpha=0.3,
-        edgecolor="none",
-        zorder=1,
-    )
-    success_bars = ax.bar(
-        side_labels,
-        successes,
-        color=colors,
-        edgecolor="black",
-        linewidth=0.6,
-        zorder=2,
-    )
-    ax.set_ylabel("Trials per side")
-    ax.set_title(_with_trial_status(f"{label}: success rate by side chosen", df))
-    ymax = max(max(totals, default=0), max(successes, default=0), 1) * 1.15
+    correct/actual uses went as the denominator and correct as the numerator.
+    correct/command uses told as the denominator and match as the numerator.
+    """
+    sides = {
+        "left": {"went": 0, "told": 0, "correct": 0, "match": 0},
+        "right": {"went": 0, "told": 0, "correct": 0, "match": 0},
+    }
+    if df.empty:
+        return sides
+    if "magnet_direction" in df.columns:
+        directions = df["magnet_direction"].fillna("").astype(str).str.strip().str.lower()
+    else:
+        directions = [""] * len(df)
+    for feeder, zone, success, direction in zip(
+        df["feeder"], df["zone"], df["success"], directions
+    ):
+        chosen = _trial_chosen_side(feeder, zone)
+        told = {"forward": "right", "reverse": "left"}.get(direction)
+        if chosen in sides:
+            sides[chosen]["went"] += 1
+            if success:
+                sides[chosen]["correct"] += 1
+            if told == chosen:
+                sides[chosen]["match"] += 1
+        if told in sides:
+            sides[told]["told"] += 1
+    return sides
+
+
+def _plot_feeder_panel(ax, df: pd.DataFrame, label: str) -> None:
+    questions = summarize_side_questions(df)
+    has_commands = questions["left"]["told"] + questions["right"]["told"] > 0
+    colors = FEEDER_SIDE_COLORS
+
+    if has_commands:
+        # Left cluster, then right. On each side: correct visits over visits,
+        # then correct visits over commands.
+        specs = []
+        for side in ("left", "right"):
+            row = questions[side]
+            specs.append((f"{side}\ncorrect/actual", row["went"], row["correct"], colors[side]))
+            specs.append((f"{side}\ncorrect/command", row["told"], row["match"], colors[side]))
+        xs = [0, 1, 2.4, 3.4]
+    else:
+        specs = []
+        for side, name in (("left", "Left (B2)"), ("right", "Right (B1)")):
+            row = questions[side]
+            specs.append((name, row["went"], row["correct"], colors[side]))
+        xs = [0, 1]
+
+    pale_bars = []
+    solid_bars = []
+    for x, (tick, denominator, numerator, color) in zip(xs, specs):
+        pale_bars.append(ax.bar(
+            x, denominator, width=0.8, color=color, alpha=0.3, edgecolor="none", zorder=1,
+        ))
+        solid_bars.append(ax.bar(
+            x, numerator, width=0.8, color=color, edgecolor="black", linewidth=0.6, zorder=2,
+        ))
+    ax.set_xticks(xs)
+    ax.set_xticklabels([spec[0] for spec in specs], fontsize=8)
+    ax.set_ylabel("Trials")
+    title = f"{label}: left / right split"
+    if has_commands:
+        title += "\nTold left is Reverse. Told right is Forward."
+    ax.set_title(_with_trial_status(title, df))
+    ymax = max((spec[1] for spec in specs), default=0)
+    ymax = max(ymax, 1) * 1.18
     ax.set_ylim(0, ymax)
-    for bar, success, total in zip(success_bars, successes, totals):
-        if total <= 0:
+    for solid, spec in zip(solid_bars, specs):
+        _, denominator, numerator, _color = spec
+        if denominator <= 0:
             continue
-        ratio_pct = 100.0 * success / total
+        ratio_pct = 100.0 * numerator / denominator
+        bar = solid[0]
         ax.text(
             bar.get_x() + bar.get_width() / 2,
-            bar.get_height() / 2 if bar.get_height() > 0 else 0.1,
+            bar.get_height() / 2 if bar.get_height() > 0 else ymax * 0.03,
             f"{ratio_pct:.0f}%",
             ha="center",
             va="center",
-            fontsize=11,
+            fontsize=9,
             fontweight="bold",
-            color="white" if bar.get_height() > ymax * 0.06 else "black",
+            color="white" if bar.get_height() > ymax * 0.08 else "black",
         )
 
 
@@ -1567,7 +1624,7 @@ def plot_panel_figure(
         fig.tight_layout(rect=[0, 0, 1, 0.96])
         return fig
 
-    fig = plt.figure(figsize=(8, 5))
+    fig = plt.figure(figsize=(12, 5.5) if panel == "feeder" else (8, 5))
     ax = fig.add_subplot(1, 1, 1)
     if panel == "success":
         _plot_success_panel(ax, df, label)
